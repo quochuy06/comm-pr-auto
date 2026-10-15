@@ -1,45 +1,34 @@
-version: '3.8'
-
 services:
   postgres:
     image: postgres:16-alpine
     container_name: comm_pr_postgres
-    restart: always
+    restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgrespassword}
       POSTGRES_DB: comm_pr_db
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-    networks:
-      - comm_net
-
   n8n:
     image: n8nio/n8n:latest
     container_name: comm_pr_n8n
-    restart: always
+    restart: unless-stopped
     ports:
-      - "5678:5678"
+      - "127.0.0.1:5678:5678"
     environment:
-      - N8N_HOST=localhost
-      - N8N_PORT=5678
-      - N8N_PROTOCOL=http
-      - WEBHOOK_URL=http://localhost:5678/
-      - GENERIC_TIMEZONE=Asia/Ho_Chi_Minh
+      N8N_HOST: localhost
+      N8N_PORT: 5678
+      N8N_PROTOCOL: http
+      WEBHOOK_URL: http://localhost:5678/
+      GENERIC_TIMEZONE: Asia/Ho_Chi_Minh
     volumes:
-      - ./n8n/data:/home/node/.n8n
+      - n8ndata:/home/node/.n8n
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
       - postgres
-    networks:
-      - comm_net
-
 volumes:
   pgdata:
-
-networks:
-  comm_net:
-    driver: bridge
+  n8ndata:

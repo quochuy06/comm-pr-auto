@@ -16,8 +16,21 @@ yarn-error.log*
 *.log
 .DS_Store
 
-# Private backend credentials, seed accounts and generated media
+# Local credentials, private backups and generated media
 .local/
 backend/storage/
 backend/.env.*
 !backend/.env.example
+
+# Local planning documents and AI assistant instructions
+/docs/
+AGENTS.md
+.agents/
+.claude/
+.cursor/
+.devin/
+.codex/
+
+# Python installer cache
+__pycache__/
+*.py[cod]
