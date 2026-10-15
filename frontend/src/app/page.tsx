@@ -1,69 +1,197 @@
-import Image from "next/image";
-
+"use client";
+import Link from "next/link";
+import {
+  FileText,
+  FolderOpen,
+  MessageSquare,
+  ShieldAlert,
+  Plus,
+} from "lucide-react";
+import { useResource } from "@/lib/api";
+import type { Dashboard } from "@/lib/types";
+import { PageTitle, Badge, Notice, dateTime, Empty } from "@/components/ui";
+import { useAuth } from "@/components/shell";
 export default function Home() {
+  const { data, error, loading } = useResource<Dashboard>("/dashboard", 8000);
+  const user = useAuth();
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+    <>
+      <PageTitle
+        title="Tổng quan truyền thông"
+        description="Theo dõi nội dung, phản hồi cộng đồng và các trường hợp cần chú ý."
+      >
+        {user?.role !== "REVIEWER" && (
+          <Link className="btn" href="/studio">
+            <Plus size={17} />
+            Tạo bài PR
+          </Link>
+        )}
+      </PageTitle>
+      <Notice error={error} />
+      {loading ? (
+        <Empty>Đang tải dữ liệu…</Empty>
+      ) : (
+        data && (
+          <div className="stack">
+            <div className="grid stats">
+              {[
+                { label: "Bài viết", value: data.posts, icon: FileText },
+                {
+                  label: "Chiến dịch",
+                  value: data.campaigns,
+                  icon: FolderOpen,
+                },
+                {
+                  label: "Bình luận",
+                  value: data.comments,
+                  icon: MessageSquare,
+                },
+                {
+                  label: "Cảnh báo chưa đóng",
+                  value: data.alerts,
+                  icon: ShieldAlert,
+                },
+              ].map(({ label, value, icon: Icon }) => (
+                <div key={label} className="card stat">
+                  <span className="stat-label">
+                    <Icon size={18} />
+                    {label}
+                  </span>
+                  <strong>{value}</strong>
+                </div>
+              ))}
+            </div>
+            <div className="notice info row between wrap">
+              <span>
+                <strong>{data.pending} bài viết</strong> đang chờ người duyệt.
+                Thông cáo khủng hoảng luôn được duyệt thủ công.
+              </span>
+              <Link href="/approval" className="btn secondary small">
+                Mở hàng đợi
+              </Link>
+            </div>
+            <div className="grid two">
+              <section className="card">
+                <h2>Hoạt động 7 ngày</h2>
+                <p className="hint mb">
+                  Bình luận đã phân tích · số tiêu cực/nghiêm trọng ở bên phải.
+                </p>
+                {data.trend.map((d) => (
+                  <div className="chart-row" key={d.date}>
+                    <span>{d.date.slice(5)}</span>
+                    <div className="chart-bar">
+                      <span
+                        style={{
+                          width: `${(d.total / Math.max(1, ...data.trend.map((x) => x.total))) * 100}%`,
+                        }}
+                      />
+                    </div>
+                    <span>
+                      {d.total} / {d.negative}
+                    </span>
+                  </div>
+                ))}
+                <div className="row wrap mt">
+                  {data.sentiments.map((s) => (
+                    <span key={s.sentiment}>
+                      <Badge value={s.sentiment} /> {s._count._all}
+                    </span>
+                  ))}
+                </div>
+              </section>
+              <section className="card">
+                <h2>Ba workflow đang phục vụ</h2>
+                {[
+                  [
+                    "01",
+                    "Nội dung & hình ảnh",
+                    "Soạn bài, tạo mô tả ảnh và kiểm tra độc lập.",
+                  ],
+                  [
+                    "02",
+                    "Cộng đồng & cảm xúc",
+                    "Phân tích bình luận, đề xuất phản hồi phù hợp.",
+                  ],
+                  [
+                    "03",
+                    "Phản hồi khủng hoảng",
+                    "Tổng hợp bằng chứng, soạn thông cáo chờ duyệt.",
+                  ],
+                ].map(([n, title, detail]) => (
+                  <div key={n} className="workflow-item row">
+                    <span className="user-avatar">{n}</span>
+                    <div>
+                      <strong>{title}</strong>
+                      <small className="block muted">{detail}</small>
+                    </div>
+                  </div>
+                ))}
+              </section>
+            </div>
+            <section className="card">
+              <div className="row between mb">
+                <h2>Yêu cầu xử lý gần đây</h2>
+                <span className="muted compact">Tự cập nhật mỗi 8 giây</span>
+              </div>
+              {!data.jobs.length ? (
+                <p className="muted">Chưa có yêu cầu xử lý.</p>
+              ) : (
+                <div className="table-scroll">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Workflow</th>
+                        <th>Trạng thái</th>
+                        <th>Thời gian</th>
+                        <th>Chi tiết</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.jobs.map((j) => (
+                        <tr key={j.id}>
+                          <td>
+                            {{
+                              content: "Nội dung PR",
+                              community: "Bình luận",
+                              crisis: "Khủng hoảng",
+                            }[j.kind] || j.kind}
+                          </td>
+                          <td>
+                            <Badge value={j.status} />
+                          </td>
+                          <td>{dateTime(j.createdAt)}</td>
+                          <td>{j.error || "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+            <section className="card">
+              <h2>Nhật ký quyết định</h2>
+              {data.audits.length ? (
+                data.audits.map((a) => (
+                  <div key={a.id} className="workflow-item">
+                    <div className="row between wrap">
+                      <strong className="compact">{a.action}</strong>
+                      <small className="muted">{dateTime(a.createdAt)}</small>
+                    </div>
+                    <small>
+                      {a.actor}
+                      {a.detail ? ` · ${a.detail}` : ""}
+                    </small>
+                  </div>
+                ))
+              ) : (
+                <p className="muted">
+                  Các quyết định duyệt và thao tác sẽ xuất hiện tại đây.
+                </p>
+              )}
+            </section>
+          </div>
+        )
+      )}
+    </>
   );
 }
