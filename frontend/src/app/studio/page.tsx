@@ -1,184 +1,250 @@
 "use client";
-
 import { useState } from "react";
-import axios from "axios";
-import { Sparkles, Loader2, Send, Image as ImageIcon } from "lucide-react";
-
-export default function StudioPage() {
-  const [topic, setTopic] = useState("");
-  const [targetAudience, setTargetAudience] = useState("Gen Z và nhân viên văn phòng");
-  const [tone, setTone] = useState("Truyền cảm hứng, tích cực");
-  const [platform, setPlatform] = useState("Facebook");
-
-  const [loading, setLoading] = useState(false);
-  const [createdPost, setCreatedPost] = useState<any>(null);
-  const [errorMsg, setErrorMsg] = useState("");
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!topic.trim()) return;
-
-    setLoading(true);
-    setErrorMsg("");
-    setCreatedPost(null);
-
-    try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
-      const res = await axios.post(`${apiUrl}/posts/generate`, {
-        topic,
-        targetAudience,
-        tone,
-        platform,
-      });
-
-      if (res.data.success) {
-        setCreatedPost(res.data.data);
-      }
-    } catch (err: any) {
-      setErrorMsg(err.response?.data?.message || err.message || "Tạo bài viết thất bại");
-    } finally {
-      setLoading(false);
-    }
-  };
-
+import Link from "next/link";
+import { Sparkles } from "lucide-react";
+import { send, useResource, errorMessage } from "@/lib/api";
+import type { Campaign, Post } from "@/lib/types";
+import { PageTitle, Notice, Banner, Badge, Empty } from "@/components/ui";
+import { ImageAssessment } from "@/components/image-assessment";
+import { useAuth } from "@/components/shell";
+function Preview({ id }: { id: string }) {
+  const {
+    data: post,
+    error,
+    refresh,
+  } = useResource<Post>(`/posts/${id}`, 5000);
+  const [busy, setBusy] = useState(false);
+  const [actionError, setError] = useState("");
+  const user = useAuth();
+  if (!post) return <Notice error={error} message="Đang tải bài viết…" />;
+  const active = ["QUEUED", "RUNNING"].includes(post.job?.status || "");
+  const needsImage = !active && !!post.content &&
+    (post.imageStatus === "FAILED" || post.imageReviewStatus === "ERROR");
   return (
-    <div className="max-w-5xl mx-auto space-y-8">
-      <div>
-        <h2 className="text-3xl font-bold tracking-tight">AI PR Content Studio</h2>
-        <p className="text-slate-500 mt-1">
-          Tạo bài viết truyền thông chuẩn tone giọng và hình ảnh banner quảng bá tự động bằng AI (Agent 1 & Agent 2).
-        </p>
+    <div className="stack">
+      <Notice error={actionError || error} />
+      <div className="row between wrap">
+        <Badge value={post.status} />
+        <span className="muted">{post.platform}</span>
       </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-5">
-          <h3 className="text-lg font-bold flex items-center space-x-2">
-            <Sparkles className="w-5 h-5 text-indigo-500" />
-            <span>Thông tin chiến dịch PR</span>
-          </h3>
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Chủ đề bài viết / Sự kiện *</label>
-              <textarea
-                rows={3}
-                required
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-                placeholder="Ví dụ: Ra mắt dòng ly tái chế EcoCup bảo vệ môi trường..."
-                value={topic}
-                onChange={(e) => setTopic(e.target.value)}
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Đối tượng mục tiêu (Audience)</label>
-              <input
-                type="text"
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-                value={targetAudience}
-                onChange={(e) => setTargetAudience(e.target.value)}
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Tông giọng (Tone)</label>
-                <select
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-                  value={tone}
-                  onChange={(e) => setTone(e.target.value)}
-                >
-                  <option value="Truyền cảm hứng, tích cực">Truyền cảm hứng</option>
-                  <option value="Chuyên nghiệp, tin cậy">Chuyên nghiệp</option>
-                  <option value="Hài hước, gần gũi">Hài hước, Gen Z</option>
-                  <option value="Trang trọng, khẩn cấp">Khẩn cấp, thông cáo</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Nền tảng</label>
-                <select
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-                  value={platform}
-                  onChange={(e) => setPlatform(e.target.value)}
-                >
-                  <option value="Facebook">Facebook</option>
-                  <option value="LinkedIn">LinkedIn</option>
-                  <option value="X">X (Twitter)</option>
-                </select>
-              </div>
-            </div>
-
-            {errorMsg && <p className="text-sm text-rose-500">{errorMsg}</p>}
-
+      {post.job && (
+        <div className="notice info">
+          <div className="row wrap">
+            <span>Yêu cầu AI:</span>
+            <Badge value={needsImage && post.job.status === "SUCCEEDED" ? "PARTIAL" : post.job.status} />
+          </div>
+          {post.job.error && <p className="mt">{post.job.error}</p>}
+        </div>
+      )}
+      {needsImage && (
+        <div className="notice info" role="status">
+          <strong>Nội dung đã có, ảnh cần xử lý thêm</strong>
+          <p className="mt">Bài đã được lưu và đang chờ người duyệt. Chức năng xử lý lại ảnh đang được hoàn thiện.</p>
+        </div>
+      )}
+      <h2>{post.headline || post.topic}</h2>
+      <p className="prose-content">
+        {post.content ||
+          "Nội dung sẽ tự cập nhật khi AI hoàn tất. Bạn có thể chuyển trang trong lúc chờ."}
+      </p>
+      <Banner
+        key={post.bannerUrl}
+        src={post.bannerUrl}
+        alt={post.headline || post.topic}
+      />
+      <div className="row wrap">
+        <span>Ảnh:</span>
+        <Badge value={post.imageStatus} />
+        <span>Rủi ro:</span>
+        <Badge value={post.risk} />
+      </div>
+      <ImageAssessment post={post} refresh={refresh} />
+      {post.reviewReason && (
+        <p className="hint">Kiểm tra AI: {post.reviewReason}</p>
+      )}
+      {user?.role !== "REVIEWER" &&
+        !["APPROVED", "PUBLISHED", "CRISIS_ALERT"].includes(post.status) && (
+          <form
+            key={post.id + (post.imagePrompt || "")}
+            onSubmit={async (e) => {
+              e.preventDefault();
+              setBusy(true);
+              setError("");
+              try {
+                await send(`/posts/${post.id}/regenerate`, "POST", {});
+                refresh();
+              } catch (err) {
+                setError(errorMessage(err));
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            <p className="hint mb">Tạo lại nội dung từ thông tin ban đầu của bài viết.</p>
             <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold flex items-center justify-center space-x-2 transition disabled:opacity-50"
+              disabled={
+                busy || ["RUNNING", "QUEUED"].includes(post.job?.status || "")
+              }
+              className="btn secondary"
             >
-              {loading ? (
-                <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  <span>AI đang soạn thảo & tạo ảnh...</span>
-                </>
-              ) : (
-                <>
-                  <Send className="w-5 h-5" />
-                  <span>Kích hoạt AI tạo nội dung</span>
-                </>
-              )}
+              {busy ? "Đang gửi…" : "Tạo lại bài viết"}
             </button>
           </form>
-        </div>
-
-        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
-          <h3 className="text-lg font-bold flex items-center space-x-2 text-slate-800">
-            <ImageIcon className="w-5 h-5 text-blue-500" />
-            <span>Xem trước bài đăng ({platform})</span>
-          </h3>
-
-          {createdPost ? (
-            <div className="border border-slate-200 rounded-xl overflow-hidden bg-slate-50 space-y-3 p-4">
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center font-bold text-white text-sm">
-                  PR
-                </div>
-                <div>
-                  <h4 className="font-semibold text-sm">Brand PR Page</h4>
-                  <span className="text-xs text-slate-500">Vừa xong • Trạng thái: {createdPost.status}</span>
-                </div>
-              </div>
-
-              <div className="text-sm text-slate-800 whitespace-pre-line">
-                {createdPost.content || "Nội dung đang được n8n Agent 1 xử lý và lưu vào cơ sở dữ liệu..."}
-              </div>
-
-              {createdPost.bannerUrl ? (
-                <div className="rounded-lg overflow-hidden border border-slate-200">
-                  <img
-                    src={createdPost.bannerUrl}
-                    alt="AI Generated Banner"
-                    className="w-full h-56 object-cover"
-                  />
-                </div>
-              ) : (
-                <div className="h-44 bg-slate-200 rounded-lg flex items-center justify-center text-slate-500 text-sm">
-                  Ảnh banner từ Agent 2 sẽ xuất hiện ở đây khi n8n gửi callback
-                </div>
-              )}
-
-              <div className="text-xs text-slate-500 italic">
-                * Bài viết đã được tạo với mã ID: <span className="font-mono text-slate-700">{createdPost.id}</span>
-              </div>
-            </div>
-          ) : (
-            <div className="h-72 border-2 border-dashed border-slate-200 rounded-xl flex flex-col items-center justify-center text-slate-400 space-y-2">
-              <Sparkles className="w-8 h-8 text-slate-300" />
-              <p className="text-sm">Điền thông tin và bấm nút để xem kết quả trực quan</p>
-            </div>
-          )}
-        </div>
-      </div>
+        )}
+      <Link
+        className="btn secondary"
+        href={post.status === "APPROVED" ? "/simulator" : "/approval"}
+      >
+        {post.status === "APPROVED" ? "Xem trên feed" : "Mở hàng đợi duyệt"}
+      </Link>
     </div>
+  );
+}
+export default function StudioPage() {
+  const { data: campaigns } = useResource<Campaign[]>("/campaigns");
+  const { data: posts, refresh } = useResource<Post[]>("/posts", 10000);
+  const [selected, setSelected] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const user = useAuth();
+  return (
+    <>
+      <PageTitle
+        title="Content Studio"
+        description="Từ ý tưởng đến bài PR: tạo nội dung, chọn hình ảnh và kiểm tra trước khi đưa lên feed."
+      />
+      <Notice error={error} />
+      <div className="grid two">
+        <section className="card">
+          <h2>
+            <Sparkles size={20} className="inline" /> Thông tin bài viết
+          </h2>
+          {user?.role === "REVIEWER" ? (
+            <Empty>
+              Tài khoản người duyệt có thể xem kết quả. Tạo nội dung bằng tài
+              khoản biên tập viên hoặc quản trị viên.
+            </Empty>
+          ) : (
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const f = new FormData(e.currentTarget);
+                setBusy(true);
+                setError("");
+                try {
+                  const post = await send<Post>(
+                    "/posts/generate",
+                    "POST",
+                    Object.fromEntries(f),
+                  );
+                  setSelected(post.id);
+                  refresh();
+                } catch (err) {
+                  setError(errorMessage(err));
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              <div className="field">
+                <label htmlFor="campaignId">Chiến dịch</label>
+                <select id="campaignId" name="campaignId">
+                  <option value="">Bài viết độc lập</option>
+                  {campaigns?.map((c) => (
+                    <option value={c.id} key={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label htmlFor="topic">
+                  Chủ đề và thông tin cần truyền tải
+                </label>
+                <textarea
+                  id="topic"
+                  name="topic"
+                  rows={4}
+                  required
+                  maxLength={1500}
+                  placeholder="Ví dụ: Giới thiệu ly tái sử dụng EcoCup, khuyến khích mang ly cá nhân khi đi cà phê. Không đưa giá hoặc ưu đãi."
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="targetAudience">Đối tượng</label>
+                <input
+                  id="targetAudience"
+                  name="targetAudience"
+                  maxLength={500}
+                  defaultValue="Sinh viên và nhân viên văn phòng"
+                />
+              </div>
+              <div className="grid two">
+                <div className="field">
+                  <label htmlFor="tone">Giọng điệu</label>
+                  <select id="tone" name="tone">
+                    <option>Gần gũi, tích cực</option>
+                    <option>Chuyên nghiệp, tin cậy</option>
+                    <option>Trang trọng, thận trọng</option>
+                  </select>
+                </div>
+                <div className="field">
+                  <label htmlFor="platform">Định dạng nền tảng</label>
+                  <select id="platform" name="platform">
+                    <option>Facebook</option>
+                    <option>LinkedIn</option>
+                    <option>X</option>
+                  </select>
+                </div>
+              </div>
+              <div className="field">
+                <label htmlFor="imagePrompt">
+                  Định hướng hình ảnh (tùy chọn)
+                </label>
+                <textarea
+                  id="imagePrompt"
+                  name="imagePrompt"
+                  rows={2}
+                  maxLength={2000}
+                  placeholder="Ví dụ: Ly tái sử dụng màu xanh trên bàn cà phê, ánh sáng ban ngày, không chữ trong ảnh."
+                />
+              </div>
+              <button disabled={busy} className="btn full">
+                {busy ? "Đang gửi yêu cầu…" : "Tạo bài viết với AI"}
+              </button>
+              <p className="hint mt">
+                AI miễn phí có hạn mức. Khi lỗi, hệ thống giữ trạng thái rõ ràng
+                để bạn thử lại.
+              </p>
+            </form>
+          )}
+        </section>
+        <section className="card">
+          <div className="field">
+            <label htmlFor="selectedPost">Xem kết quả bài viết</label>
+            <select
+              id="selectedPost"
+              value={selected}
+              onChange={(e) => setSelected(e.target.value)}
+            >
+              <option value="">Chọn một bài viết</option>
+              {posts?.map((p) => (
+                <option value={p.id} key={p.id}>
+                  {p.topic}
+                </option>
+              ))}
+            </select>
+          </div>
+          {selected ? (
+            <Preview key={selected} id={selected} />
+          ) : (
+            <Empty>
+              Tạo bài mới hoặc chọn một bài để xem nội dung, banner và trạng
+              thái xử lý.
+            </Empty>
+          )}
+        </section>
+      </div>
+    </>
   );
 }
