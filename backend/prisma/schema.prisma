@@ -23,6 +23,32 @@ enum SentimentType {
   CRISIS
 }
 
+enum Role {
+  ADMIN
+  EDITOR
+  REVIEWER
+}
+
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  name         String
+  passwordHash String
+  role         Role      @default(EDITOR)
+  createdAt    DateTime  @default(now())
+  sessions     Session[]
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+
+  @@index([expiresAt])
+}
+
 model Campaign {
   id          String   @id @default(uuid())
   name        String
@@ -33,29 +59,104 @@ model Campaign {
 }
 
 model Post {
-  id             String      @id @default(uuid())
+  id             String     @id @default(uuid())
   campaignId     String?
-  campaign       Campaign?   @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  campaign       Campaign?  @relation(fields: [campaignId], references: [id], onDelete: SetNull)
   topic          String
   targetAudience String?
   tone           String?
-  platform       String      @default("Facebook")
+  platform       String     @default("Facebook")
   headline       String?
-  content        String?     @db.Text
-  bannerUrl      String?     @db.Text
-  status         PostStatus  @default(DRAFT)
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
+  content        String?    @db.Text
+  bannerUrl      String?    @db.Text
+  imagePrompt    String?    @db.Text
+  imageStatus    String     @default("PENDING")
+  imageReviewStatus String @default("NOT_REVIEWED")
+  imageReview Json?
+  imageError String? @db.Text
+  contentReview Json?
+  risk           String     @default("UNKNOWN")
+  reviewReason   String?    @db.Text
+  approvedBy     String?
+  latestJobId    String?
+  status         PostStatus @default(DRAFT)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
   comments       Comment[]
+  alerts         Alert[]
+
+  @@index([status, createdAt])
 }
 
 model Comment {
-  id        String         @id @default(uuid())
-  postId    String
-  post      Post           @relation(fields: [postId], references: [id], onDelete: Cascade)
-  author    String
-  text      String         @db.Text
-  sentiment SentimentType  @default(NEUTRAL)
-  replyText String?        @db.Text
-  createdAt DateTime       @default(now())
+  id             String        @id @default(uuid())
+  postId         String
+  post           Post          @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author         String
+  text           String        @db.Text
+  sentiment      SentimentType @default(NEUTRAL)
+  risk           String        @default("UNKNOWN")
+  sensitive      Boolean       @default(false)
+  analysisStatus String        @default("PENDING")
+  reason         String?       @db.Text
+  suggestedReply String?       @db.Text
+  replyText      String?       @db.Text
+  replyStatus    String        @default("NONE")
+  moderated      Boolean       @default(false)
+  latestJobId    String?
+  createdAt      DateTime      @default(now())
+
+  @@index([postId, createdAt])
+}
+
+model Alert {
+  id           String    @id @default(uuid())
+  postId       String
+  post         Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  trigger      String    @db.Text
+  evidence     Json
+  status       String    @default("OPEN")
+  summary      String?   @db.Text
+  statement    String?   @db.Text
+  actions      Json?
+  reviewReason String?   @db.Text
+  latestJobId  String?
+  publishedAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([postId, status])
+}
+
+model WorkflowJob {
+  id        String   @id @default(uuid())
+  kind      String
+  mode      String @default("CONTENT")
+  imageAsset Json?
+  entityId  String
+  status    String   @default("QUEUED")
+  error     String?  @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([entityId, createdAt])
+}
+
+model Settings {
+  id                String   @id @default("default")
+  mode              String   @default("CONDITIONAL")
+  negativeThreshold Int      @default(3)
+  windowMinutes     Int      @default(30)
+  updatedAt         DateTime @updatedAt
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  actor     String
+  action    String
+  entityId  String
+  detail    String?  @db.Text
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
 }
