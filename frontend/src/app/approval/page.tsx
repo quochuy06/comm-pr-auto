@@ -1,240 +1,320 @@
 "use client";
-
-import { useEffect, useState } from "react";
-import axios from "axios";
-import { CheckCircle2, XCircle, RefreshCw, Edit3, Image as ImageIcon, Send, Clock } from "lucide-react";
-
-interface Post {
-  id: string;
-  topic: string;
-  headline?: string;
-  content?: string;
-  bannerUrl?: string;
-  platform: string;
-  status: string;
-  createdAt: string;
-}
-
-export default function ApprovalPage() {
-  const [posts, setPosts] = useState<Post[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editContent, setEditContent] = useState("");
-  const [editHeadline, setEditHeadline] = useState("");
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
-
-  const fetchPendingPosts = async () => {
-    setLoading(true);
+import { useState } from "react";
+import Link from "next/link";
+import { useResource, send, errorMessage } from "@/lib/api";
+import type { Post, ReviewComment } from "@/lib/types";
+import {
+  PageTitle,
+  Notice,
+  Badge,
+  Banner,
+  Empty,
+  dateTime,
+} from "@/components/ui";
+import { ImageAssessment } from "@/components/image-assessment";
+import { useAuth } from "@/components/shell";
+function PostReview({
+  post,
+  refresh,
+  canReview,
+}: {
+  post: Post;
+  refresh: () => void;
+  canReview: boolean;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  async function act(action: string, body: unknown = {}) {
+    setBusy(true);
+    setError("");
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
-      const res = await axios.get(`${apiUrl}/posts`);
-      if (res.data.success) {
-        // Lấy các bài viết đang chờ phê duyệt
-        const pending = res.data.data.filter(
-          (p: Post) => p.status === "PENDING_APPROVAL" || p.status === "DRAFT"
-        );
-        setPosts(pending);
-      }
-    } catch (err) {
-      console.error("Lỗi khi tải danh sách duyệt:", err);
+      await send(`/posts/${post.id}/${action}`, "PATCH", body);
+      refresh();
+    } catch (e) {
+      setError(errorMessage(e));
     } finally {
-      setLoading(false);
+      setBusy(false);
     }
-  };
-
-  useEffect(() => {
-    fetchPendingPosts();
-  }, []);
-
-  const handleStartEdit = (post: Post) => {
-    setEditingId(post.id);
-    setEditHeadline(post.headline || post.topic || "");
-    setEditContent(post.content || "");
-  };
-
-  const handleApprove = async (id: string) => {
-    setActionLoading(id);
-    try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
-      const payload: any = {};
-      if (editingId === id) {
-        payload.headline = editHeadline;
-        payload.content = editContent;
-      }
-
-      const res = await axios.patch(`${apiUrl}/posts/${id}/approve`, payload);
-      if (res.data.success) {
-        setPosts((prev) => prev.filter((p) => p.id !== id));
-        setEditingId(null);
-      }
-    } catch (err: any) {
-      alert("Lỗi duyệt bài: " + (err.response?.data?.message || err.message));
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  const handleReject = async (id: string) => {
-    setActionLoading(id);
-    try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
-      const res = await axios.patch(`${apiUrl}/posts/${id}/reject`);
-      if (res.data.success) {
-        setPosts((prev) => prev.filter((p) => p.id !== id));
-        setEditingId(null);
-      }
-    } catch (err: any) {
-      alert("Lỗi từ chối bài: " + (err.response?.data?.message || err.message));
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
+  }
   return (
-    <div className="max-w-6xl mx-auto space-y-8">
-      <div className="flex justify-between items-center">
+    <article className="card">
+      <div className="row between wrap mb">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Quy trình Phê duyệt (Human-in-the-loop)</h2>
-          <p className="text-slate-500 mt-1">
-            Kiểm tra chất lượng bài viết do AI sinh ra, hiệu đính nội dung và phê duyệt trước khi phát hành.
-          </p>
+          <h2>{post.topic}</h2>
+          <small className="muted">
+            {post.campaign?.name || "Bài độc lập"} · {post.platform} ·{" "}
+            {dateTime(post.createdAt)}
+          </small>
         </div>
-        <button
-          onClick={fetchPendingPosts}
-          disabled={loading}
-          className="flex items-center space-x-2 px-4 py-2 border border-slate-300 rounded-lg hover:bg-slate-100 transition text-sm font-medium text-slate-700"
-        >
-          <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
-          <span>Làm mới</span>
-        </button>
+        <Badge value={post.status} />
       </div>
-
-      {loading ? (
-        <div className="py-20 text-center text-slate-400">Đang tải danh sách bài chờ duyệt...</div>
-      ) : posts.length === 0 ? (
-        <div className="bg-white rounded-xl border border-dashed border-slate-300 p-12 text-center space-y-3">
-          <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto" />
-          <h3 className="text-lg font-bold text-slate-700">Hàng đợi trống</h3>
-          <p className="text-sm text-slate-500">
-            Hiện tại không có bài viết nào cần duyệt. Bạn có thể sang <strong>PR Content Studio</strong> để tạo bài mới.
+      <Notice error={error} />
+      <div className="grid two">
+        <div>
+          <Banner key={post.bannerUrl} src={post.bannerUrl} alt={post.topic} />
+          <div className="row wrap mt">
+            <Badge value={post.imageStatus} />
+            <span className="muted compact">Rủi ro</span>
+            <Badge value={post.risk} />
+          </div>
+          <p className="hint mt">
+            {post.reviewReason || "Chưa có kết quả kiểm tra AI."}
           </p>
+          <ImageAssessment post={post} refresh={refresh} />
+          {post.imagePrompt && (
+            <details className="mt">
+              <summary>Mô tả ảnh</summary>
+              <p className="hint">{post.imagePrompt}</p>
+            </details>
+          )}
         </div>
-      ) : (
-        <div className="space-y-6">
-          {posts.map((post) => {
-            const isEditing = editingId === post.id;
-            return (
-              <div
-                key={post.id}
-                className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col lg:flex-row"
-              >
-                {/* Visual Banner Preview */}
-                <div className="lg:w-2/5 bg-slate-100 p-6 flex flex-col justify-between border-b lg:border-b-0 lg:border-r border-slate-200">
-                  <div className="space-y-2">
-                    <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">
-                      <Clock className="w-3.5 h-3.5 mr-1" /> {post.status}
-                    </span>
-                    <span className="ml-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                      {post.platform}
-                    </span>
-                  </div>
-
-                  <div className="my-4">
-                    {post.bannerUrl ? (
-                      <div className="rounded-lg overflow-hidden border border-slate-300 shadow-inner">
-                        <img
-                          src={post.bannerUrl}
-                          alt="AI Banner"
-                          className="w-full h-52 object-cover"
-                        />
-                      </div>
-                    ) : (
-                      <div className="h-52 bg-slate-200 rounded-lg flex flex-col items-center justify-center text-slate-400 space-y-1">
-                        <ImageIcon className="w-8 h-8" />
-                        <span className="text-xs">Chưa có banner từ Pollinations</span>
-                      </div>
-                    )}
-                  </div>
-
-                  <p className="text-xs text-slate-400 font-mono truncate">ID: {post.id}</p>
-                </div>
-
-                {/* Content Review & Actions */}
-                <div className="lg:w-3/5 p-6 flex flex-col justify-between space-y-4">
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-start">
-                      <h3 className="text-lg font-bold text-slate-800">
-                        {isEditing ? (
-                          <input
-                            type="text"
-                            value={editHeadline}
-                            onChange={(e) => setEditHeadline(e.target.value)}
-                            className="w-full px-2 py-1 border border-slate-300 rounded text-sm font-bold"
-                          />
-                        ) : (
-                          post.headline || post.topic
-                        )}
-                      </h3>
-                      {!isEditing && (
-                        <button
-                          onClick={() => handleStartEdit(post)}
-                          className="text-xs font-medium text-indigo-600 hover:text-indigo-800 flex items-center space-x-1 ml-2"
-                        >
-                          <Edit3 className="w-3.5 h-3.5" />
-                          <span>Chỉnh sửa</span>
-                        </button>
-                      )}
-                    </div>
-
-                    <div className="text-sm text-slate-700 bg-slate-50 p-4 rounded-lg border border-slate-100">
-                      {isEditing ? (
-                        <textarea
-                          rows={7}
-                          value={editContent}
-                          onChange={(e) => setEditContent(e.target.value)}
-                          className="w-full p-2 border border-slate-300 rounded text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        />
-                      ) : (
-                        <p className="whitespace-pre-line">
-                          {post.content || "Chưa có nội dung văn bản. Đang chờ AI xử lý..."}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Action Buttons */}
-                  <div className="flex items-center justify-end space-x-3 pt-3 border-t border-slate-100">
-                    {isEditing && (
-                      <button
-                        onClick={() => setEditingId(null)}
-                        className="px-4 py-2 border border-slate-300 text-slate-600 rounded-lg text-sm font-medium hover:bg-slate-100"
-                      >
-                        Hủy sửa
-                      </button>
-                    )}
-                    <button
-                      onClick={() => handleReject(post.id)}
-                      disabled={actionLoading === post.id}
-                      className="px-4 py-2 border border-rose-300 text-rose-600 rounded-lg text-sm font-medium hover:bg-rose-50 transition flex items-center space-x-1"
-                    >
-                      <XCircle className="w-4 h-4" />
-                      <span>Từ chối</span>
-                    </button>
-                    <button
-                      onClick={() => handleApprove(post.id)}
-                      disabled={actionLoading === post.id}
-                      className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold transition flex items-center space-x-1 shadow-sm"
-                    >
-                      <CheckCircle2 className="w-4 h-4" />
-                      <span>{actionLoading === post.id ? "Đang xử lý..." : "Duyệt & Xuất bản"}</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            void act(
+              "approve",
+              Object.fromEntries(new FormData(e.currentTarget)),
             );
-          })}
-        </div>
+          }}
+        >
+          <fieldset
+            disabled={
+              !canReview ||
+              busy ||
+              post.status === "DRAFT" ||
+              post.imageReviewStatus === "PENDING"
+            }
+          >
+            <div className="field">
+              <label htmlFor={`headline-${post.id}`}>Tiêu đề</label>
+              <input
+                id={`headline-${post.id}`}
+                name="headline"
+                defaultValue={post.headline || ""}
+                required
+                maxLength={500}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor={`content-${post.id}`}>Nội dung</label>
+              <textarea
+                id={`content-${post.id}`}
+                name="content"
+                defaultValue={post.content || ""}
+                rows={8}
+                required
+                maxLength={12000}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor={`banner-${post.id}`}>URL banner</label>
+              <input
+                id={`banner-${post.id}`}
+                name="bannerUrl"
+                defaultValue={post.bannerUrl || ""}
+                placeholder="https://…"
+                required
+                maxLength={6000}
+              />
+              <p className="hint">
+                Nếu ảnh AI lỗi, bổ sung ảnh HTTPS phù hợp và kiểm tra trước khi
+                duyệt.
+              </p>
+            </div>
+            <button className="btn" disabled={busy}>
+              Duyệt lên feed mô phỏng
+            </button>
+          </fieldset>
+          <div className="row wrap mt">
+            {canReview && (
+              <button
+                disabled={busy}
+                type="button"
+                className="btn danger"
+                onClick={() => void act("reject")}
+              >
+                Từ chối
+              </button>
+            )}
+            <Link className="btn secondary" href="/studio">
+              Mở Studio
+            </Link>
+          </div>
+          {post.status === "DRAFT" && (
+            <p className="hint mt">
+              Chờ AI hoàn tất. Nếu xử lý lỗi, vào Studio chọn bài và tạo lại.
+            </p>
+          )}
+          {!canReview && (
+            <p className="hint mt">
+              Chỉ người duyệt hoặc quản trị viên có thể phê duyệt.
+            </p>
+          )}
+        </form>
+      </div>
+    </article>
+  );
+}
+function CommentReview({
+  comment: c,
+  refresh,
+  canReview,
+}: {
+  comment: ReviewComment;
+  refresh: () => void;
+  canReview: boolean;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  async function act(action: string, body: unknown = {}) {
+    setBusy(true);
+    setError("");
+    try {
+      await send(
+        `/comments/${c.id}/${action}`,
+        action === "retry" ? "POST" : "PATCH",
+        body,
+      );
+      refresh();
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <article className="card">
+      <h2>{c.post?.topic}</h2>
+      <div className="row wrap">
+        <strong>{c.author}</strong>
+        <Badge value={c.sentiment} />
+        <Badge value={c.risk} />
+        <Badge value={c.analysisStatus} />
+      </div>
+      <p className="prose-content mt">{c.text}</p>
+      <Notice error={error} />
+      <p className="hint mb">{c.reason || "Chờ kết quả phân tích."}</p>
+      {c.replyStatus === "PENDING" && (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            void act("reply", {
+              replyText: new FormData(e.currentTarget).get("replyText"),
+            });
+          }}
+        >
+          <label htmlFor={`reply-${c.id}`}>Phản hồi đề xuất</label>
+          <textarea
+            id={`reply-${c.id}`}
+            name="replyText"
+            defaultValue={c.suggestedReply || ""}
+            rows={4}
+            maxLength={5000}
+            required
+            disabled={!canReview || busy}
+          />
+          <div className="row wrap mt">
+            <button disabled={!canReview || busy} className="btn">
+              Duyệt phản hồi
+            </button>
+            <button
+              disabled={!canReview || busy}
+              className="btn danger"
+              type="button"
+              onClick={() => void act("reject")}
+            >
+              Từ chối
+            </button>
+          </div>
+        </form>
       )}
-    </div>
+      {c.analysisStatus === "FAILED" && (
+        <button
+          className="btn secondary"
+          disabled={!canReview || busy}
+          onClick={() => void act("retry")}
+        >
+          Phân tích lại
+        </button>
+      )}
+    </article>
+  );
+}
+export default function ApprovalPage() {
+  const posts = useResource<Post[]>("/posts", 6000);
+  const comments = useResource<ReviewComment[]>("/comments", 6000);
+  const [tab, setTab] = useState("posts");
+  const user = useAuth();
+  const canReview = user?.role === "ADMIN" || user?.role === "REVIEWER";
+  const pendingPosts =
+    posts.data?.filter((p) =>
+      ["DRAFT", "PENDING_APPROVAL"].includes(p.status),
+    ) || [];
+  const pendingComments =
+    comments.data?.filter(
+      (c) => c.replyStatus === "PENDING" || c.analysisStatus === "FAILED",
+    ) || [];
+  return (
+    <>
+      <PageTitle
+        title="Hàng đợi duyệt"
+        description="Kiểm tra, hiệu đính và quyết định trước khi nội dung xuất hiện trên feed mô phỏng."
+      />
+      <Notice error={posts.error || comments.error} />
+      <div className="tabs">
+        <button
+          className={tab === "posts" ? "active" : ""}
+          onClick={() => setTab("posts")}
+        >
+          Bài PR ({pendingPosts.length})
+        </button>
+        <button
+          className={tab === "comments" ? "active" : ""}
+          onClick={() => setTab("comments")}
+        >
+          Phản hồi bình luận ({pendingComments.length})
+        </button>
+        <Link className="btn secondary" href="/alerts">
+          Thông cáo khủng hoảng
+        </Link>
+      </div>
+      <div className="stack">
+        {tab === "posts" ? (
+          pendingPosts.length ? (
+            pendingPosts.map((p) => (
+              <PostReview
+                key={
+                  p.id +
+                  p.status +
+                  (p.bannerUrl || "") +
+                  (p.headline || "") +
+                  (p.content || "")
+                }
+                post={p}
+                refresh={posts.refresh}
+                canReview={canReview}
+              />
+            ))
+          ) : (
+            <Empty>
+              {posts.loading ? "Đang tải…" : "Không có bài viết chờ duyệt."}
+            </Empty>
+          )
+        ) : pendingComments.length ? (
+          pendingComments.map((c) => (
+            <CommentReview
+              key={c.id + c.replyStatus + c.analysisStatus}
+              comment={c}
+              refresh={comments.refresh}
+              canReview={canReview}
+            />
+          ))
+        ) : (
+          <Empty>
+            {comments.loading ? "Đang tải…" : "Không có phản hồi cần xử lý."}
+          </Empty>
+        )}
+      </div>
+    </>
   );
 }

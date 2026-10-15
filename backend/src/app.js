@@ -5,7 +5,11 @@ import prisma from "./prisma.js";
 import authRoutes from "./routes/authRoutes.js";
 import coreRoutes from "./routes/coreRoutes.js";
 import postRoutes from "./routes/postRoutes.js";
-import { authenticate } from "./middleware/auth.js";
+import approvalRoutes from "./routes/approvalRoutes.js";
+import communityRoutes from "./routes/communityRoutes.js";
+import { authenticate, internalOnly } from "./middleware/auth.js";
+import { handleN8nCallback } from "./controllers/approvalController.js";
+import { mediaDir } from "./services/images.js";
 export const app = express();
 app.disable("x-powered-by");
 const origins = (
@@ -33,9 +37,11 @@ app.get("/health", async (req, res) => {
     res.status(503).json({ status: "DEGRADED", database: "UNAVAILABLE" });
   }
 });
+app.use("/media", express.static(mediaDir, { dotfiles: "deny" }));
 app.use("/api/auth", authRoutes);
+app.post("/api/webhooks/:kind", internalOnly, handleN8nCallback);
 app.use("/api", authenticate);
-app.use("/api", coreRoutes);
+app.use("/api", coreRoutes, approvalRoutes, communityRoutes);
 app.use("/api/posts", postRoutes);
 app.use((req, res) =>
   res.status(404).json({ success: false, message: "Không tìm thấy API." }),
