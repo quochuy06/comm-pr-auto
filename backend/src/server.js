@@ -1,24 +1,14 @@
-import express from 'express';
-import cors from 'cors';
-import dotenv from 'dotenv';
-import postRoutes from './routes/postRoutes.js';
-import approvalRoutes from './routes/approvalRoutes.js';
-
-dotenv.config();
-
-const app = express();
-const PORT = process.env.PORT || 5000;
-
-app.use(cors());
-app.use(express.json());
-
-app.get('/health', (req, res) => {
-  res.json({ status: 'OK', timestamp: new Date() });
-});
-
-app.use('/api', approvalRoutes);
-app.use('/api/posts', postRoutes);
-
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Backend server is running on http://localhost:${PORT}`);
-});
+import { app } from "./app.js";
+import prisma from "./prisma.js";
+import { recoverJobs } from "./services/workflows.js";
+await recoverJobs();
+const server = app.listen(process.env.PORT || 5000, "0.0.0.0", () =>
+  console.log(`Backend ready on port ${process.env.PORT || 5000}`),
+);
+for (const signal of ["SIGINT", "SIGTERM"])
+  process.on(signal, () =>
+    server.close(async () => {
+      await prisma.$disconnect();
+      process.exit(0);
+    }),
+  );

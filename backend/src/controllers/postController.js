@@ -1,87 +1,176 @@
-import axios from 'axios';
-import prisma from '../prisma.js';
-
-// GET /api/posts - Lấy danh sách bài viết
+import { Prisma } from "@prisma/client";
+import prisma from "../prisma.js";
+import { text, choice, HttpError, audit } from "../lib/errors.js";
+import { createJob, dispatch } from "../services/workflows.js";
+const statuses = [
+  "DRAFT",
+  "PENDING_APPROVAL",
+  "APPROVED",
+  "PUBLISHED",
+  "REJECTED",
+  "CRISIS_ALERT",
+];
+const include = {
+  campaign: true,
+  comments: { orderBy: { createdAt: "asc" } },
+  alerts: { orderBy: { createdAt: "desc" } },
+};
 export const getPosts = async (req, res) => {
-  try {
-    const { status, campaignId } = req.query;
-    const where = {};
-
-    if (status) where.status = status;
-    if (campaignId) where.campaignId = campaignId;
-
-    const posts = await prisma.post.findMany({
+  const where = {};
+  if (req.query.status)
+    where.status = choice(req.query.status, statuses, "Trạng thái");
+  if (req.query.campaignId)
+    where.campaignId = text(req.query.campaignId, "Chiến dịch", 100);
+  res.json({
+    success: true,
+    data: await prisma.post.findMany({
       where,
-      include: { campaign: true },
-      orderBy: { createdAt: 'desc' }
-    });
-
-    res.json({ success: true, data: posts });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
+      include,
+      orderBy: { createdAt: "desc" },
+      take: 200,
+    }),
+  });
 };
-
-// GET /api/posts/:id - Lấy chi tiết bài viết
 export const getPostById = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const post = await prisma.post.findUnique({
-      where: { id },
-      include: { campaign: true, comments: true }
+  const data = await prisma.post.findUnique({
+    where: { id: req.params.id },
+    include,
+  });
+  if (!data) throw new HttpError(404, "Không tìm thấy bài.");
+  const job = data.latestJobId
+    ? await prisma.workflowJob.findUnique({ where: { id: data.latestJobId } })
+    : null;
+  res.json({ success: true, data: { ...data, job } });
+};
+export const generatePost = async (req, res) => {
+  const topic = text(req.body.topic, "Chủ đề", 1500);
+  const data = {
+    topic,
+    targetAudience: text(req.body.targetAudience, "Đối tượng", 500, true),
+    tone: text(req.body.tone, "Giọng điệu", 200, true),
+    platform: choice(
+      req.body.platform || "Facebook",
+      ["Facebook", "LinkedIn", "X"],
+      "Nền tảng",
+    ),
+    campaignId: text(req.body.campaignId, "Chiến dịch", 100, true),
+    imagePrompt: text(req.body.imagePrompt, "Mô tả ảnh", 2000, true),
+  };
+  const { post, job } = await prisma.$transaction(async (db) => {
+    const post = await db.post.create({ data });
+    const job = await createJob(db, "content", post.id);
+    await audit(db, req.user.email, "POST_GENERATE", post.id);
+    return { post, job };
+  });
+  dispatch(job);
+  res
+    .status(201)
+    .json({ success: true, data: { ...post, latestJobId: job.id, job } });
+};
+export const regeneratePost = async (req, res) => {
+  const { post, job } = await prisma.$transaction(async (db) => {
+    const p = await db.post.findUnique({ where: { id: req.params.id } });
+    if (!p) throw new HttpError(404, "Không tìm thấy bài.");
+    if (["APPROVED", "PUBLISHED", "CRISIS_ALERT"].includes(p.status))
+      throw new HttpError(
+        409,
+        "Bài đã xuất hiện trên feed. Hãy tạo bản nháp mới.",
+      );
+    const changed = await db.post.updateMany({
+      where: {
+        id: p.id,
+        status: { in: ["DRAFT", "PENDING_APPROVAL", "REJECTED"] },
+        updatedAt: p.updatedAt,
+      },
+      data: {
+        status: "DRAFT",
+        risk: "UNKNOWN",
+        imageStatus: "PENDING",
+        imageReviewStatus: "NOT_REVIEWED",
+        imageReview: Prisma.DbNull,
+        contentReview: Prisma.DbNull,
+        imageError: null,
+        reviewReason: null,
+        ...(req.body.imagePrompt !== undefined
+          ? { imagePrompt: text(req.body.imagePrompt, "Mô tả ảnh", 2000, true) }
+          : {}),
+      },
     });
-
-    if (!post) {
-      return res.status(404).json({ success: false, message: 'Post not found' });
-    }
-
-    res.json({ success: true, data: post });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
+    if (!changed.count)
+      throw new HttpError(
+        409,
+        "Bài vừa được thay đổi. Hãy tải lại trước khi tạo lại.",
+      );
+    const post = await db.post.findUniqueOrThrow({ where: { id: p.id } });
+    const job = await createJob(db, "content", p.id);
+    await audit(db, req.user.email, "POST_REGENERATE", p.id);
+    return { post, job };
+  });
+  dispatch(job);
+  res.json({ success: true, data: { ...post, latestJobId: job.id, job } });
 };
 
-// POST /api/posts/generate - Tạo bài viết nháp và kích hoạt webhook n8n
-export const generatePost = async (req, res) => {
-  try {
-    const { topic, targetAudience, tone, platform, campaignId } = req.body;
-
-    if (!topic) {
-      return res.status(400).json({ success: false, message: 'Topic is required' });
-    }
-
-    // 1. Tạo bản ghi bài viết nháp trong PostgreSQL
-    const newPost = await prisma.post.create({
+export const processPostImage = async (req, res) => {
+  const mode =
+    req.params.action === "review-image" ? "REVIEW_IMAGE" : "IMAGE_ONLY";
+  const { post, job } = await prisma.$transaction(async (db) => {
+    const current = await db.post.findUnique({ where: { id: req.params.id } });
+    if (!current) throw new HttpError(404, "Không tìm thấy bài.");
+    if (current.status === "CRISIS_ALERT")
+      throw new HttpError(
+        409,
+        "Bài đang có cảnh báo rủi ro; cần xử lý cảnh báo trước khi tạo lại ảnh.",
+      );
+    if (!current.headline || !current.content || !current.imagePrompt)
+      throw new HttpError(
+        409,
+        "Cần nội dung và mô tả ảnh trước khi xử lý riêng ảnh.",
+      );
+    if (
+      ["APPROVED", "PUBLISHED", "CRISIS_ALERT"].includes(current.status) &&
+      req.user.role === "EDITOR"
+    )
+      throw new HttpError(
+        403,
+        "Bài đã duyệt cần quản trị viên hoặc người duyệt kiểm tra lại ảnh.",
+      );
+    const active = current.latestJobId
+      ? await db.workflowJob.findUnique({ where: { id: current.latestJobId } })
+      : null;
+    if (active && ["QUEUED", "RUNNING"].includes(active.status))
+      throw new HttpError(
+        409,
+        "Bài đang xử lý. Hãy chờ hoặc thử lại khi có kết quả.",
+      );
+    const prompt =
+      mode === "IMAGE_ONLY" && req.body.imagePrompt !== undefined
+        ? text(req.body.imagePrompt, "Mô tả ảnh", 2000)
+        : current.imagePrompt;
+    const changed = await db.post.updateMany({
+      where: { id: current.id, updatedAt: current.updatedAt },
       data: {
-        topic,
-        targetAudience: targetAudience || 'General Audience',
-        tone: tone || 'Professional',
-        platform: platform || 'Facebook',
-        campaignId: campaignId || null,
-        status: 'DRAFT'
-      }
+        imagePrompt: prompt,
+        imageReviewStatus: "PENDING",
+        imageError: null,
+        status: "PENDING_APPROVAL",
+        approvedBy: null,
+      },
     });
-
-    // 2. Kích hoạt Webhook n8n (Agent 1 & Agent 2)
-    const n8nWebhookUrl = process.env.N8N_WEBHOOK_URL || 'http://localhost:5678/webhook/generate-post';
-
-    axios.post(n8nWebhookUrl, {
-      postId: newPost.id,
-      topic: newPost.topic,
-      target_audience: newPost.targetAudience,
-      tone: newPost.tone,
-      platform: newPost.platform
-    }).catch((err) => {
-      console.warn('[Warning] Webhook call to n8n failed or pending:', err.message);
-    });
-
-    // 3. Trả kết quả ngay cho phía gọi
-    res.status(201).json({
-      success: true,
-      message: 'Post generation triggered successfully',
-      data: newPost
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
+    if (!changed.count)
+      throw new HttpError(409, "Bài vừa thay đổi. Hãy tải lại.");
+    const job = await createJob(db, "content", current.id, mode);
+    await audit(
+      db,
+      req.user.email,
+      mode === "REVIEW_IMAGE" ? "IMAGE_REVIEW_REQUESTED" : "IMAGE_REGENERATE",
+      current.id,
+      "Giữ nguyên tiêu đề và nội dung; chờ kiểm tra ảnh trước khi tự duyệt.",
+    );
+    return {
+      post: await db.post.findUnique({ where: { id: current.id } }),
+      job,
+    };
+  });
+  dispatch(job);
+  res.json({ success: true, data: { ...post, job } });
 };

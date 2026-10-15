@@ -1,46 +1,58 @@
-import { PrismaClient } from '@prisma/client';
-
+import "dotenv/config";
+import { PrismaClient } from "@prisma/client";
+import { randomBytes } from "node:crypto";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { hashPassword } from "../src/lib/security.js";
 const prisma = new PrismaClient();
-
-async function main() {
-  console.log('Seeding initial data...');
-
-  // Xóa dữ liệu cũ nếu có
-  await prisma.comment.deleteMany();
-  await prisma.post.deleteMany();
-  await prisma.campaign.deleteMany();
-
-  // Tạo Campaign mẫu
-  const campaign = await prisma.campaign.create({
-    data: {
-      name: 'Chiến dịch Green Life 2026',
-      description: 'Truyền thông sản phẩm tái chế thân thiện với môi trường.'
-    }
+try {
+  await mkdir("../.local", { recursive: true, mode: 0o700 });
+  let accounts;
+  try {
+    accounts = JSON.parse(
+      await readFile("../.local/demo-accounts.json", "utf8"),
+    );
+  } catch {
+    accounts = ["ADMIN", "EDITOR", "REVIEWER"].map((role, i) => ({
+      email: `${role.toLowerCase()}@commpr.local`,
+      name: ["Quản trị viên", "Biên tập viên", "Người duyệt"][i],
+      role,
+      password: randomBytes(12).toString("base64url"),
+    }));
+    await writeFile(
+      "../.local/demo-accounts.json",
+      JSON.stringify(accounts, null, 2),
+      { mode: 0o600 },
+    );
+  }
+  for (const account of accounts)
+    await prisma.user.upsert({
+      where: { email: account.email },
+      create: {
+        email: account.email,
+        name: account.name,
+        role: account.role,
+        passwordHash: await hashPassword(account.password),
+      },
+      update: {},
+    });
+  await prisma.settings.upsert({
+    where: { id: "default" },
+    create: { id: "default" },
+    update: {},
   });
-
-  // Tạo Post mẫu đã duyệt
-  await prisma.post.create({
-    data: {
-      campaignId: campaign.id,
-      topic: 'Ra mắt EcoCup 2026',
-      targetAudience: 'Gen Z',
-      tone: 'Truyền cảm hứng',
-      platform: 'Facebook',
-      headline: 'Chung tay vì hành tinh xanh cùng EcoCup',
-      content: 'Hãy cùng chúng tôi thay đổi thói quen dùng đồ nhựa dùng một lần ngay hôm nay!\n\n👉 Nhận quà tặng tại đây: ecocup.vn\n\n#GreenLife #EcoCup #Sustainability',
-      bannerUrl: 'https://image.pollinations.ai/prompt/Eco-friendly%20coffee%20cup%20on%20minimalist%20wooden%20desk?width=1200&height=630&nologo=true',
-      status: 'APPROVED'
-    }
+  await prisma.campaign.upsert({
+    where: { id: "demo-green-life-2026" },
+    create: {
+      id: "demo-green-life-2026",
+      name: "Green Life 2026 · Demo",
+      description:
+        "Chiến dịch giới thiệu sản phẩm tái sử dụng. Không tự đưa ra chứng nhận, ưu đãi hay số liệu chưa được cung cấp.",
+    },
+    update: {},
   });
-
-  console.log('Seed completed successfully!');
+  console.log(
+    "Đã bổ sung 3 tài khoản và chiến dịch mẫu; dữ liệu hiện có được giữ nguyên. Thông tin đăng nhập: .local/demo-accounts.json (ngoài Git).",
+  );
+} finally {
+  await prisma.$disconnect();
 }
-
-main()
-  .catch((e) => {
-    console.error(e);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
