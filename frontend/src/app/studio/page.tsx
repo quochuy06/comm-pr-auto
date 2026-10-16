@@ -39,7 +39,7 @@ function Preview({ id }: { id: string }) {
       {needsImage && (
         <div className="notice info" role="status">
           <strong>Nội dung đã có, ảnh cần xử lý thêm</strong>
-          <p className="mt">Bài đã được lưu và đang chờ người duyệt. Chức năng xử lý lại ảnh đang được hoàn thiện.</p>
+          <p className="mt">Bài đã được lưu. Bạn có thể thử lại riêng ảnh bên dưới để giữ nguyên nội dung. Bài chưa được tự duyệt khi ảnh chưa đạt kiểm tra.</p>
         </div>
       )}
       <h2>{post.headline || post.topic}</h2>
@@ -68,10 +68,13 @@ function Preview({ id }: { id: string }) {
             key={post.id + (post.imagePrompt || "")}
             onSubmit={async (e) => {
               e.preventDefault();
+              const f = new FormData(e.currentTarget);
               setBusy(true);
               setError("");
               try {
-                await send(`/posts/${post.id}/regenerate`, "POST", {});
+                await send(`/posts/${post.id}/regenerate`, "POST", {
+                  imagePrompt: f.get("imagePrompt"),
+                });
                 refresh();
               } catch (err) {
                 setError(errorMessage(err));
@@ -80,14 +83,25 @@ function Preview({ id }: { id: string }) {
               }
             }}
           >
-            <p className="hint mb">Tạo lại nội dung từ thông tin ban đầu của bài viết.</p>
+            <label htmlFor="regenerate-prompt">Điều chỉnh mô tả hình ảnh</label>
+            <textarea
+              id="regenerate-prompt"
+              name="imagePrompt"
+              defaultValue={post.imagePrompt || ""}
+              maxLength={2000}
+              rows={3}
+            />
+            <p className="hint mb">
+              Mô tả rõ chủ thể, bối cảnh và bố cục mong muốn. Tạo lại sẽ chạy cả
+              bước soạn và kiểm tra bài.
+            </p>
             <button
               disabled={
                 busy || ["RUNNING", "QUEUED"].includes(post.job?.status || "")
               }
               className="btn secondary"
             >
-              {busy ? "Đang gửi…" : "Tạo lại bài viết"}
+              {busy ? "Đang gửi…" : "Tạo lại bài và banner"}
             </button>
           </form>
         )}
