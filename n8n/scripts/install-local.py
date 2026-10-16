@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install only Community and Crisis workflows into the existing local n8n, with private backups.
+"""Install the three workflows into the existing local n8n, with private backups.
 Run explicitly from the project root. Secrets never enter tracked workflow JSON.
 """
 import json, pathlib, subprocess, tempfile, os, datetime, time, urllib.request
@@ -37,8 +37,8 @@ for node in json.loads(current['nodes']):
 credentials=[{'id':'comm-pr-callback','name':'Comm PR Internal Token','type':'httpHeaderAuth','data':{'name':'x-comm-token','value':secret}}]
 if key: credentials.append({'id':'comm-pr-gemini','name':'Comm PR Gemini','type':'httpHeaderAuth','data':{'name':'x-goog-api-key','value':key}})
 elif not any(c['id']=='comm-pr-gemini' for c in sql('SELECT id FROM credentials_entity')): raise RuntimeError('Gemini key not found. Configure Comm PR Gemini credential in n8n.')
-ids={'community':'commPRCommunity1','crisis':'commPRCrisis01'}
-files={'community':'agent-3-community.json','crisis':'agent-4-crisis.json'}
+ids={'content':current['id'],'community':'commPRCommunity1','crisis':'commPRCrisis01'}
+files={'content':'agent-1-2-content-creation.json','community':'agent-3-community.json','crisis':'agent-4-crisis.json'}
 bundle=[]
 for kind,filename in files.items():
     w=json.loads((ROOT/'n8n/workflows'/filename).read_text());w['id']=ids[kind]
@@ -48,6 +48,7 @@ for kind,filename in files.items():
             model=env.get('GEMINI_MODEL','gemini-3.5-flash-lite')
             if not model.replace('-','').replace('.','').isalnum(): raise RuntimeError('Invalid GEMINI_MODEL')
             n['parameters']['url']='https://generativelanguage.googleapis.com/v1beta/models/'+model+':generateContent'
+        if n['name']=='14a Download and stage image': n['parameters']['url']=os.environ.get('BACKEND_CALLBACK_BASE','http://172.17.0.1:5000')+'/api/webhooks/prepare-image'
         if n['name']=='16 Persist result in backend': n['parameters']['url']=os.environ.get('BACKEND_CALLBACK_BASE','http://172.17.0.1:5000')+'/api/webhooks/'+kind
     bundle.append(w)
 try:
