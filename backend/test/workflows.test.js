@@ -2,7 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import vm from "node:vm";
-for (const file of ["agent-3-community.json", "agent-4-crisis.json"]) {
+for (const file of fs
+  .readdirSync("../n8n/workflows")
+  .filter((f) => f.endsWith(".json"))) {
   const w = JSON.parse(fs.readFileSync("../n8n/workflows/" + file));
   test(`${file}: connected nodes, credentials, code syntax and failure branch`, () => {
     assert.ok(w.nodes.length >= 12);

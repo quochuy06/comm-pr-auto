@@ -1,7 +1,7 @@
 import fs from "node:fs";
-const mode = process.argv[2] || "community";
-if (!["community", "crisis"].includes(mode)) {
-  console.error("Usage: node scripts/live-demo.mjs community|crisis");
+const mode = process.argv[2] || "content";
+if (!["content", "community", "crisis"].includes(mode)) {
+  console.error("Usage: node scripts/live-demo.mjs content|community|crisis");
   process.exit(1);
 }
 const account = JSON.parse(fs.readFileSync(".local/demo-accounts.json")).find(
@@ -48,7 +48,29 @@ fs.mkdirSync(".local/demo-runs", { recursive: true });
 const file = ".local/demo-runs/" + Date.now() + "-" + mode + ".json",
   result = { mode };
 try {
-  {
+  if (mode === "content") {
+    const post = await api("/posts/generate", "POST", {
+      topic:
+        "[DEMO GIỮA KỲ] Khuyến khích sinh viên đọc sách mỗi ngày. Giữ nhãn DEMO ở tiêu đề, không thêm giá, ưu đãi, lịch hay số liệu.",
+      targetAudience: "Sinh viên",
+      tone: "Gần gũi",
+      platform: "Facebook",
+      imagePrompt:
+        "An open paperback book on a wooden desk beside a green plant, close-up photograph in daylight.",
+    });
+    result.postId = post.id;
+    fs.writeFileSync(file, JSON.stringify(result, null, 2));
+    result.job = await wait(post.id, "content", 440);
+    result.post = await api("/posts/" + post.id);
+    console.log(
+      JSON.stringify({
+        post: result.post.status,
+        image: result.post.imageStatus,
+        imageReview: result.post.imageReviewStatus,
+        reason: result.post.imageReview?.reason,
+      }),
+    );
+  } else {
     const posts = await api("/posts"),
       alerts = mode === "crisis" ? await api("/alerts") : [];
     const post = posts.find(
@@ -96,6 +118,7 @@ try {
   }
   if (
     result.job?.status !== "SUCCEEDED" ||
+    (mode === "content" && (result.post?.imageStatus !== "VERIFIED" || result.post?.imageReviewStatus !== "PASS")) ||
     (result.crisisJob && result.crisisJob.status !== "SUCCEEDED")
   )
     process.exitCode = 1;
