@@ -19,6 +19,8 @@ for (const [route, title] of [
   ["/", "Tổng quan truyền thông"],
   ["/campaigns", "Chiến dịch"],
   ["/studio", "Content Studio"],
+  ["/planning", "Kế hoạch & lịch đăng"],
+  ["/insights", "Chuyển thể & báo cáo"],
   ["/approval", "Hàng đợi duyệt"],
   ["/simulator", "Feed & bình luận"],
   ["/alerts", "Cảnh báo rủi ro"],
@@ -48,6 +50,8 @@ await page.setViewportSize({ width: 390, height: 844 });
 for (const route of [
   "/",
   "/studio",
+  "/planning",
+  "/insights",
   "/approval",
   "/simulator",
   "/alerts",

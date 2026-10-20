@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install the three workflows into the existing local n8n, with private backups.
+"""Install the eight member-owned workflows into the existing local n8n, with private backups.
 Run explicitly from the project root. Secrets never enter tracked workflow JSON.
 """
 import json, pathlib, subprocess, tempfile, os, datetime, time, urllib.request

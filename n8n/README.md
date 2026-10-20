@@ -1,43 +1,59 @@
-# Ba workflow báo cáo giữa kỳ
-Content có 24 node; Community và Crisis có 17 node mỗi luồng. Sinh lại JSON: `node n8n/scripts/build-workflows.mjs`.
+# 8 workflow — mỗi thành viên 2 luồng
 
-1. **Content & Visual Review**: nhận chủ đề → kiểm tra ID → giới hạn ngữ cảnh → prompt theo loại nội dung → Gemini soạn → trích text → parse JSON → validate → rẽ nhánh lỗi → prompt kiểm tra độc lập → Gemini kiểm tra → validate đánh giá → quyết định đề xuất → dựng URL ảnh → backend tải/lưu ảnh → kiểm tra tải thành công → gửi bytes ảnh thực tế cho Gemini → chuẩn hóa kết quả đánh giá ảnh → payload callback → lưu backend → trả kết quả.
-2. **Community & Sentiment**: cùng các bước kiểm soát nhưng đầu vào là bình luận + bài viết; phân loại cảm xúc, độ nhạy cảm/rủi ro; tạo phản hồi, kiểm tra phản hồi; backend quyết định tự trả lời hoặc chờ duyệt.
-3. **Crisis Communication**: ngữ cảnh gồm bài viết + bằng chứng kích hoạt; tổng hợp sự việc, thông cáo và hành động; kiểm tra độc lập; backend luôn chuyển duyệt thủ công.
+| Thành viên | Workflow | Node | Trigger |
+| --- | --- | ---: | --- |
+| Hoàng | Tạo/kiểm tra văn bản PR | 17 | POST `generate-post` |
+| Hoàng | Tạo/kiểm tra ảnh thực tế | 13 | POST `generate-image` |
+| Huy | Lập kế hoạch chiến dịch | 17 | POST `plan-campaign` |
+| Huy | Đăng theo lịch | 12 | Mỗi phút / POST `publish-due` |
+| Bảo | Chuyển thể đa nền tảng | 17 | POST `repurpose-content` |
+| Bảo | Báo cáo chiến dịch | 19 | POST `campaign-report` / thứ Hai 08:00 |
+| Phúc | Phân tích/phản hồi cộng đồng | 18 | POST `analyze-comment` |
+| Phúc | Xử lý khủng hoảng có bằng chứng | 18 | POST `handle-crisis` |
 
-Nhánh lỗi không tạo nội dung giả: callback `ok:false` làm job FAILED. Backend xử lý callback bằng token, job ID và version của thực thể; nhận lại callback không gây xuất bản lặp.
+Tất cả webhook yêu cầu Header Auth `Comm PR Internal Token`. Không gọi trực tiếp từ trình duyệt. Backend tạo WorkflowJob và quyết định trạng thái nghiệp vụ. Chi tiết phân công/nhánh: [WORKFLOW_OWNERSHIP.md](WORKFLOW_OWNERSHIP.md).
 
-## Cài trên máy đang dùng
-Không chạy thêm `docker compose up` nếu PostgreSQL/n8n hiện có đã chạy: tránh tạo instance và volume khác. Compose dành cho máy mới. Instance hiện tại tên `n8n`, volume `n8n_n8n_data`.
+## Sinh và cài đặt
 
-Từ root chạy `python3 n8n/scripts/install-local.py`. Script sao lưu SQLite riêng, lấy khóa Gemini đang có mà không in ra màn hình, chuyển vào credential `Comm PR Gemini`, tạo credential token nội bộ, giữ ID workflow nội dung, thêm hai workflow, publish và restart n8n. Cần Docker CLI và quyền truy cập container. Backend phải có `N8N_CALLBACK_SECRET` tối thiểu 32 ký tự. Có thể đổi `N8N_CONTAINER` và `BACKEND_CALLBACK_BASE`.
+```bash
+node n8n/scripts/build-workflows.mjs
+python3 n8n/scripts/install-local.py
+```
 
-Import thủ công ở máy mới: tạo 2 Header Auth credentials: `Comm PR Gemini` (`x-goog-api-key`) và `Comm PR Internal Token` (`x-comm-token`, giống backend). Gán credential cho node Gemini, Webhook và Callback; chỉnh URL callback theo địa chỉ backend nhìn từ Docker; publish từng workflow. Không đặt secret trực tiếp trong JSON.
+Generator lấy từng module `scripts/members/{hoang,huy,bao,phuc}.mjs`, dùng builder chung và tạo đúng tám JSON. `legacy-specs.mjs` chứa prompt nền để kế thừa, không phải workflow thứ chín.
 
-## Giới hạn
-- Tạo bài mới gọi Gemini tối đa ba lần: soạn, kiểm tra văn bản, kiểm tra ảnh. Community/Crisis dùng hai lần. Tạo lại hoặc kiểm tra riêng ảnh chỉ gọi Gemini một lần khi tải ảnh thành công. Hàng đợi backend chạy tuần tự để hạn chế dồn request; miễn phí vẫn có thể hết quota.
-- Gemini nhận bytes ảnh đã lưu qua `inline_data`. Backend gắn kết quả với SHA-256 của ảnh và nội dung, kiểm tra cấu trúc, yêu cầu chủ thể/hành động/chi tiết/bối cảnh đều đúng và confidence >= 0.85. FAIL/UNCERTAIN/ERROR không tự duyệt. Đây là kiểm tra bằng AI, không bảo đảm ảnh chính xác tuyệt đối.
-- Ảnh Pollinations là dịch vụ ngoài: lỗi ảnh chuyển bài sang chờ duyệt và báo thiếu banner. Có thể bổ sung ảnh HTTPS thủ công.
-- Ngưỡng khủng hoảng và chế độ tự động nằm ở Settings; backend là nơi quyết định cuối cùng.
+Installer dùng instance `n8n` hiện có, sao lưu SQLite vào `.local/backups`, giữ ID Content/Community/Crisis và bổ sung năm ID ổn định. Đọc Gemini/model/token từ `backend/.env`, lưu key trong credential; JSON trên Git chỉ tham chiếu credential. Sau import/publish cần restart n8n; script đã thực hiện và chờ readiness. Chỉ chạy khi không có job đang xử lý.
 
-## Kiểm tra và tạo lại riêng ảnh
-- Nhánh `03a`/`03b` giữ nguyên tiêu đề/nội dung cho mode IMAGE_ONLY hoặc REVIEW_IMAGE. Các mode này bỏ qua hai lượt Gemini xử lý văn bản.
-- Backend `POST /api/webhooks/prepare-image` xác thực token, job hiện hành, tải ảnh tối đa hai lần khi lỗi tạm thời, lưu bytes và hash. REVIEW_IMAGE dùng lại ảnh `/media/` hiện tại.
-- Các node `14a`–`14e` kiểm tra ảnh thật. Nếu tải lỗi hoặc Gemini vision lỗi, bài vẫn chờ người duyệt.
-- `POST /api/posts/:id/regenerate-image` tạo ảnh mới; `POST /api/posts/:id/review-image` kiểm tra lại ảnh đã lưu. Đang xử lý thì không cho duyệt hoặc gửi thêm yêu cầu ảnh.
-- Bài đã duyệt chỉ ADMIN/REVIEWER được đưa về chờ duyệt để kiểm tra lại ảnh; tạm ẩn khỏi feed. Bài cũ chưa lưu đánh giá văn bản vẫn cần người duyệt dù ảnh PASS.
-- Gemini image input tham khảo: https://ai.google.dev/gemini-api/docs/image-understanding .
-- Pollinations hiện có tài liệu endpoint xác thực tại https://gen.pollinations.ai/ . Mã hiện tại vẫn dùng nguồn ảnh legacy đang có; một số lần thử trả HTTP 402. Không tự đổi sang dịch vụ trả phí; UI báo lỗi và hỗ trợ người duyệt thay URL ảnh.
+Không chạy Compose mới khi PostgreSQL/n8n hiện tại đang hoạt động. Có thể đặt `N8N_CONTAINER` và `BACKEND_CALLBACK_BASE` nếu thay mạng Docker. Callback mặc định `http://172.17.0.1:5000`.
 
-## Đổi project/API key Gemini
+Máy mới: tạo hai credential Header Auth (`Comm PR Gemini`: `x-goog-api-key`; `Comm PR Internal Token`: `x-comm-token`), nhập tám JSON, gán credential, chỉnh model/URL backend và publish từng workflow. Installer local yêu cầu instance đã có Content để tìm project/ID.
 
-- Lưu `GEMINI_API_KEY` trong `backend/.env` (ngoài Git). `GEMINI_MODEL` chọn model cho tất cả node Gemini; cấu hình hiện tại là `gemini-3.5-flash-lite`.
-- Chạy `python3 n8n/scripts/install-local.py` khi không có job đang chạy. Script ưu tiên key từ `.env`, cập nhật credential `comm-pr-gemini`, đồng bộ model, backup dữ liệu và publish/restart n8n.
-- Generator JSON cũng dùng `gemini-3.5-flash-lite` mặc định. Key chỉ nằm trong cấu hình riêng/credential, không nằm trong JSON workflow.
-- Khi đổi sang project `comm-pr-auto`, API đã trả 404 cho `gemini-2.5-flash` với thông báo model không còn dành cho người dùng mới và đề nghị `gemini-3.8-flash`; vì vậy đã đổi model cùng key. Lượt gọi tạo nội dung đầu tiên trên model mới gặp 503 quá tải; lần kiểm tra tiếp theo timeout. Không coi việc import credential thành công là bằng chứng tạo nội dung thành công.
+## Hợp đồng và chính sách
 
-## Cấu hình đã kiểm tra cuối cho buổi demo
-- Model đang cài: `gemini-3.5-flash-lite`; cùng key/project riêng của nhóm. Đã chạy thành công Content, Community và Crisis sau khi 3.8 Flash gặp 503/timeout. Các đoạn ghi 3.8 ở trên là lịch sử chuyển key.
-- Generator/installer và `.env.example` mặc định Flash-Lite; `GEMINI_MODEL` trong `.env` vẫn là cấu hình khi cài.
-- Lỗi gọi/kiểm tra văn bản được phân biệt: 429 hạn mức, 503 quá tải, timeout, lỗi quyền/key, model không khả dụng hoặc JSON sai. Không trả nguyên error chứa thông tin credential ra UI.
-- n8n execution có thể hiển thị success khi nhánh lỗi đã callback thành công; trạng thái nghiệp vụ cần xem ở WorkflowJob trên web. `success` của n8n không có nghĩa AI đã tạo nội dung thành công.
+- Content callback `/api/webhooks/content-text` lưu văn bản rồi tạo job ảnh trong transaction. Callback lặp không tạo thêm job ảnh; text job thành công không có nghĩa ảnh đã đạt.
+- Image callback `/api/webhooks/content` giữ nguyên văn bản, gắn đánh giá với hash nội dung/bytes ảnh. IMAGE_ONLY/REVIEW_IMAGE gọi webhook ảnh riêng. Lỗi tải/vision là PARTIAL, không tự duyệt.
+- Planning/Repurpose/Report callback `/api/workflow-internal/callback/:kind` lưu WorkflowArtifact và luôn chờ người duyệt. Thử lại giữ input snapshot; nếu nguồn chuyển thể đổi, cần tạo yêu cầu mới.
+- Publisher lấy tối đa 50 lịch đến hạn. Backend transaction kiểm tra revision lịch, hash nội dung và trạng thái duyệt trước khi xuất bản lên feed mô phỏng. Hủy/sửa lịch làm request cũ vô hiệu. Lịch trễ quá 24 giờ cần người dùng đặt lại.
+- Report snapshot số liệu từ database theo [from,to), không nhận số liệu AI bịa. Tuần tính từ thứ Hai 00:00 giờ Việt Nam. Unique key chống trùng báo cáo campaign/tuần; tối đa 100 chiến dịch có bài mỗi lượt. AI lỗi vẫn giữ số liệu để xem/xuất CSV/thử lại.
+- Community job V2 yêu cầu issueType/urgency; khiếu nại, an toàn, pháp lý hoặc mức ưu tiên HIGH chuyển người duyệt. Crisis V2 yêu cầu evidenceIds nằm trong dữ liệu nguồn và các bước cần xác minh; không tự đăng thông cáo.
+- Backend tuần tự gọi AI để hạn chế dồn request. Restart tiếp tục QUEUED, đánh dấu RUNNING thất bại để thử lại rõ ràng. Không tự lặp vô hạn khi hết quota.
+- n8n có thể báo execution success khi đã gửi callback lỗi thành công. Xem WorkflowJob/Artifact trên web để biết kết quả nghiệp vụ.
+
+## Kiểm thử
+
+```bash
+cd backend
+RUN_DB_TESTS=true npm test
+```
+
+Test API/DB tạo fixture riêng, dọn sau kiểm tra, không gọi AI thật. Kiểm tra cấu trúc/code node, callback trùng/cũ, quyền, lịch đăng đồng thời, source revision, số liệu snapshot và kiểm tra ảnh.
+
+Từ root, ứng dụng và n8n đang chạy:
+
+```bash
+PLAYWRIGHT_BROWSERS_PATH="$PWD/.local/browsers" node scripts/browser-smoke.mjs
+PLAYWRIGHT_BROWSERS_PATH="$PWD/.local/browsers" node scripts/browser-business.mjs
+LIVE_AI=true node scripts/workflow-v2-live.mjs
+```
+
+Lệnh cuối gọi dịch vụ AI/ảnh đang cấu hình, kiểm tra đủ tám workflow bằng fixture riêng rồi dọn; lưu kết quả ngoài Git ở `.local/workflow-v2/live-results.json`. Cần Pollinations key có quyền/hạn mức để xác nhận tạo ảnh; không dùng ảnh giả để báo PASS.

@@ -75,7 +75,7 @@ try {
       alerts = mode === "crisis" ? await api("/alerts") : [];
     const post = posts.find(
       (p) =>
-        ["APPROVED", "PUBLISHED"].includes(p.status) &&
+        ["PUBLISHED", "CRISIS_ALERT"].includes(p.status) &&
         p.content &&
         (mode !== "crisis" ||
           !alerts.some(
@@ -86,8 +86,8 @@ try {
     if (!post)
       throw new Error(
         mode === "crisis"
-          ? "Cần bài đã duyệt chưa có cảnh báo mở để demo tạo cảnh báo mới. Hãy xử lý cảnh báo cũ hoặc chuẩn bị bài khác."
-          : "Cần một bài đã duyệt để thử bình luận.",
+          ? "Cần bài đã đăng chưa có cảnh báo mở để demo tạo cảnh báo mới. Hãy xử lý cảnh báo cũ hoặc chuẩn bị bài khác."
+          : "Cần một bài đã đăng để thử bình luận.",
       );
     const c = await api("/posts/" + post.id + "/comments", "POST", {
       text:

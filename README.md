@@ -1,6 +1,6 @@
 # PR Workspace — Communication & PR
 
-Ứng dụng demo giữa kỳ: Next.js + Express + Prisma/PostgreSQL + n8n + Gemini. Ba workflow: Content **24 node**, Community và Crisis **17 node/luồng**, hỗ trợ tạo bài/banner, phân tích bình luận và soạn phản hồi khủng hoảng.
+Ứng dụng Next.js + Express + Prisma/PostgreSQL + n8n + Gemini. **8 workflow, mỗi thành viên phụ trách 2 luồng**: Hoàng (văn bản/ảnh), Huy (kế hoạch/lịch đăng), Bảo (chuyển thể/báo cáo), Phúc (cộng đồng/khủng hoảng). Xem [phân công và nhánh Git](n8n/WORKFLOW_OWNERSHIP.md).
 
 Website dùng feed mô phỏng, còn tài khoản, dữ liệu, AI và workflow chạy thật. Facebook Page dành cho giai đoạn cuối kỳ.
 
@@ -46,12 +46,19 @@ npm start
 ```
 
 ## Workflow
-Xem [hướng dẫn n8n](n8n/README.md). Instance hiện tại đã cài ba workflow và credential. Chỉ cài lại khi thay đổi JSON:
+Xem [hướng dẫn n8n](n8n/README.md). Instance hiện tại đã cài tám workflow và credential. Chỉ cài lại khi thay đổi JSON:
 ```bash
 node n8n/scripts/build-workflows.mjs
 python3 n8n/scripts/install-local.py
 ```
 Script cài đặt sao lưu trước khi thay đổi và restart n8n. Không chạy lúc workflow đang xử lý yêu cầu. Không commit export chứa API key hoặc dữ liệu thực thi.
+
+## Chức năng mở rộng
+- `/planning`: lập kế hoạch chiến dịch, duyệt ý tưởng, tạo bài và đặt/hủy lịch đăng.
+- `/insights`: chuyển thể bài đã duyệt sang Facebook/LinkedIn/X, báo cáo theo kỳ và tải CSV.
+- Lịch đăng quét mỗi phút, kiểm tra lại phiên bản duyệt và chống đăng trùng. Lịch trễ quá 24 giờ chuyển lỗi để người dùng đặt lại.
+- Báo cáo tuần trước tự tạo thứ Hai 08:00 giờ Việt Nam; số liệu từ database, nhận xét AI chờ người duyệt.
+- Các migration mới chỉ bổ sung dữ liệu. Sau pull cần `npm run db:migrate`, `npm run db:generate`, sinh/cài lại workflow và khởi động backend; frontend cần build lại.
 
 ## Quyền và quy tắc
 | Vai trò | Chức năng |
@@ -61,7 +68,7 @@ Script cài đặt sao lưu trước khi thay đổi và restart n8n. Không ch�
 | REVIEWER | Duyệt/từ chối bài và phản hồi, ẩn bình luận, xử lý khủng hoảng |
 
 - Mặc định tự động có điều kiện, có thể đổi sang thủ công.
-- Bài PR: đủ nội dung, ảnh tải thật, Gemini kiểm tra ảnh thực tế đạt PASS, rủi ro thấp và kiểm tra văn bản đạt mới tự duyệt.
+- Bài PR: đủ nội dung, ảnh tải thật, Gemini kiểm tra ảnh thực tế đạt PASS, rủi ro thấp và kiểm tra văn bản đạt mới tự duyệt. **Duyệt không tự đăng**: vào Kế hoạch & lịch đăng để đặt giờ. Feed chỉ hiển thị PUBLISHED/CRISIS_ALERT. Bài APPROVED cũ giữ nguyên, cần đặt lịch để xuất bản.
 - Bình luận: chỉ tự trả lời nội dung tích cực/trung tính, không nhạy cảm, qua kiểm tra.
 - Khủng hoảng: dấu hiệu nghiêm trọng hoặc ngưỡng tiêu cực trong cửa sổ theo dõi; thông cáo luôn chờ người duyệt.
 - Hết quota/lỗi AI: FAILED, không tự duyệt; người dùng thử lại ở Studio/Approval/Alerts.
@@ -89,7 +96,7 @@ PLAYWRIGHT_BROWSERS_PATH="$PWD/.local/browsers" node scripts/browser-business.mj
 Chạy từ root, frontend/backend đang bật và đã seed. Ảnh chụp nằm trong `.local/`.
 
 Kiểm tra nhanh trước buổi demo (không gọi AI): `node scripts/demo-preflight.mjs`.
-Model đã thử thành công: `gemini-3.5-flash-lite`. Kết quả kiểm tra cuối và dữ liệu dự phòng lưu local tại `docs/FINAL_DEMO_CHECK_2026-10-15.md`. Việc tạo ảnh thật cần key Pollinations có hạn mức; chưa xác nhận lại toàn bộ luồng với dịch vụ ảnh trong đợt tích hợp này.
+Model đã thử thành công: `gemini-3.5-flash-lite`. Kết quả kiểm tra cuối và dữ liệu dự phòng lưu local tại `docs/FINAL_DEMO_CHECK_2026-10-15.md`. Đợt mở rộng v2 đã kiểm tra lại đủ tám workflow với dịch vụ thật, gồm tải ảnh VERIFIED và đánh giá PASS; xem `n8n/WORKFLOW_OWNERSHIP.md`. Kết quả mỗi lần chạy vẫn phụ thuộc hạn mức dịch vụ.
 
 ## Tài liệu nhóm
 - Bộ nhớ phạm vi và tiến độ: `docs/IMPLEMENTATION_PLAN.md`

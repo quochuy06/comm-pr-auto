@@ -107,9 +107,9 @@ function Preview({ id }: { id: string }) {
         )}
       <Link
         className="btn secondary"
-        href={post.status === "APPROVED" ? "/simulator" : "/approval"}
+        href={post.status === "APPROVED" ? "/planning" : ["PUBLISHED", "CRISIS_ALERT"].includes(post.status) ? "/simulator" : "/approval"}
       >
-        {post.status === "APPROVED" ? "Xem trên feed" : "Mở hàng đợi duyệt"}
+        {post.status === "APPROVED" ? "Đặt lịch đăng" : ["PUBLISHED", "CRISIS_ALERT"].includes(post.status) ? "Xem trên feed" : "Mở hàng đợi duyệt"}
       </Link>
     </div>
   );
