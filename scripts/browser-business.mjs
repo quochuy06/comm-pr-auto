@@ -84,14 +84,14 @@ try {
   if (saved.status !== "APPROVED" || saved.imageReviewStatus !== "MANUAL")
     throw Error("Manual approval failed");
   // Approval no longer publishes. Explicitly schedule this isolated fixture.
-  const scheduled = await page.request.post(`/api/posts/${p.id}/schedule`, { data: { scheduledAt: new Date().toISOString() } });
+  const scheduled = await page.request.post(`http://localhost:3000/api/posts/${p.id}/schedule`, { data: { scheduledAt: new Date().toISOString() } });
   if (!scheduled.ok()) throw Error("Scheduling failed");
   const schedule = (await scheduled.json()).data;
   const publication = await fetch("http://localhost:5000/api/workflow-internal/publish", {
     method: "POST", headers: { "Content-Type": "application/json", "x-comm-token": process.env.N8N_CALLBACK_SECRET },
     body: JSON.stringify({ id: schedule.id, expectedUpdatedAt: schedule.updatedAt }),
   });
-  if (!publication.ok() || (await publication.json()).status !== "PUBLISHED") throw Error("Publication failed");
+  if (!publication.ok || (await publication.json()).status !== "PUBLISHED") throw Error("Publication failed");
   await page.getByRole("button", { name: /Phản hồi bình luận/ }).click();
   const commentCard = page
     .locator("article")
