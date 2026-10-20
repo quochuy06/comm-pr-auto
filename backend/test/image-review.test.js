@@ -123,7 +123,7 @@ test("Image download retries transient failures, validates bytes and records rea
 });
 test("n8n sends actual image bytes to Gemini and preserves text for image-only requests", async () => {
   const w = JSON.parse(
-    await fs.readFile("../n8n/workflows/agent-1-2-content-creation.json"),
+    await fs.readFile("../n8n/workflows/hoang-02-image.json"),
   );
   const run = (name, $json) =>
     vm.runInNewContext(

@@ -10,6 +10,7 @@ import communityRoutes from "./routes/communityRoutes.js";
 import { authenticate, internalOnly } from "./middleware/auth.js";
 import { prepareImage } from "./controllers/imageController.js";
 import { handleN8nCallback } from "./controllers/approvalController.js";
+import { handleTextCallback } from "./controllers/textWorkflowController.js";
 import { mediaDir } from "./services/images.js";
 export const app = express();
 app.disable("x-powered-by");
@@ -41,6 +42,7 @@ app.get("/health", async (req, res) => {
 app.use("/media", express.static(mediaDir, { dotfiles: "deny" }));
 app.use("/api/auth", authRoutes);
 app.post("/api/webhooks/prepare-image", internalOnly, prepareImage);
+app.post("/api/webhooks/content-text", internalOnly, handleTextCallback);
 app.post("/api/webhooks/:kind", internalOnly, handleN8nCallback);
 app.use("/api", authenticate);
 app.use("/api", coreRoutes, approvalRoutes, communityRoutes);

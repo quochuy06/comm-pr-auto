@@ -21,6 +21,11 @@ for (const file of fs
       if (n.type === "n8n-nodes-base.httpRequest")
         assert.ok(n.credentials?.httpHeaderAuth);
     }
+    if (!w.connections["09 Generation succeeded"]) {
+      assert.ok(w.nodes.some(n => n.name === "14d Inspect image with Gemini"));
+      assert.ok(w.connections["14b Image available"].main[1].length);
+      return;
+    }
     assert.ok(
       w.connections["09 Generation succeeded"].main[1].some(
         (t) => t.node === "15 Build authenticated callback",

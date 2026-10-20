@@ -100,7 +100,7 @@ export function dispatch(job) {
           process.env.N8N_BASE_URL || "http://localhost:5678"
         ).replace(/\/$/, "");
         await axios.post(
-          `${base}/webhook/${paths[job.kind]}`,
+          `${base}/webhook/${job.kind === "content" && job.mode !== "CONTENT" ? "generate-image" : paths[job.kind]}`,
           { jobId: job.id, entityId: job.entityId, context },
           {
             headers: { "x-comm-token": process.env.N8N_CALLBACK_SECRET },
@@ -125,8 +125,10 @@ export function dispatch(job) {
 export async function recoverJobs() {
   const stale = await prisma.workflowJob.findMany({
     where: { status: { in: ["QUEUED", "RUNNING"] } },
-    select: { id: true },
+    
   });
-  for (const j of stale)
-    await failJob(j.id, "Backend đã khởi động lại. Hãy thử lại yêu cầu.");
+  for (const j of stale) {
+    if (j.status === "QUEUED") dispatch(j);
+    else await failJob(j.id, "Backend đã khởi động lại trong lúc xử lý. Hãy thử lại yêu cầu.");
+  }
 }

@@ -37,8 +37,8 @@ for node in json.loads(current['nodes']):
 credentials=[{'id':'comm-pr-callback','name':'Comm PR Internal Token','type':'httpHeaderAuth','data':{'name':'x-comm-token','value':secret}}]
 if key: credentials.append({'id':'comm-pr-gemini','name':'Comm PR Gemini','type':'httpHeaderAuth','data':{'name':'x-goog-api-key','value':key}})
 elif not any(c['id']=='comm-pr-gemini' for c in sql('SELECT id FROM credentials_entity')): raise RuntimeError('Gemini key not found. Configure Comm PR Gemini credential in n8n.')
-ids={'content':current['id'],'community':'commPRCommunity1','crisis':'commPRCrisis01'}
-files={'content':'agent-1-2-content-creation.json','community':'agent-3-community.json','crisis':'agent-4-crisis.json'}
+ids={'content':current['id'],'image':'commPRImage01','community':'commPRCommunity1','crisis':'commPRCrisis01'}
+files={'content':'hoang-01-content.json','image':'hoang-02-image.json','community':'agent-3-community.json','crisis':'agent-4-crisis.json'}
 bundle=[]
 for kind,filename in files.items():
     w=json.loads((ROOT/'n8n/workflows'/filename).read_text());w['id']=ids[kind]
@@ -49,7 +49,8 @@ for kind,filename in files.items():
             if not model.replace('-','').replace('.','').isalnum(): raise RuntimeError('Invalid GEMINI_MODEL')
             n['parameters']['url']='https://generativelanguage.googleapis.com/v1beta/models/'+model+':generateContent'
         if n['name']=='14a Download and stage image': n['parameters']['url']=os.environ.get('BACKEND_CALLBACK_BASE','http://172.17.0.1:5000')+'/api/webhooks/prepare-image'
-        if n['name']=='16 Persist result in backend': n['parameters']['url']=os.environ.get('BACKEND_CALLBACK_BASE','http://172.17.0.1:5000')+'/api/webhooks/'+kind
+        if n.get('parameters',{}).get('url','').startswith('http://172.17.0.1:5000/'):
+            n['parameters']['url']=n['parameters']['url'].replace('http://172.17.0.1:5000',os.environ.get('BACKEND_CALLBACK_BASE','http://172.17.0.1:5000'))
     bundle.append(w)
 try:
     with tempfile.TemporaryDirectory(prefix='n8n-import-',dir=PRIVATE) as temp:
@@ -77,4 +78,4 @@ for attempt in range(45):
     time.sleep(1)
 else:
     raise RuntimeError('Workflows installed but n8n is not ready yet; check container logs.')
-print('Installed and published 3 workflows (content: 24 nodes, community/crisis: 17 nodes each). Existing content workflow ID preserved. Backup in .local/backups; secrets stored as n8n credentials. Container restarted.')
+print(f'Installed and published {len(bundle)} workflows. Existing content workflow ID preserved. Backup in .local/backups; secrets stored as n8n credentials.')
