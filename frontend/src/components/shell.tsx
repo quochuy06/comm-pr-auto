@@ -25,6 +25,7 @@ const links = [
   { href: "/approval", label: "Hàng đợi duyệt", icon: CheckCheck },
   { href: "/simulator", label: "Feed & bình luận", icon: MessageSquare },
   { href: "/alerts", label: "Cảnh báo rủi ro", icon: ShieldAlert },
+  { href: "/insights", label: "Chuyển thể & báo cáo", icon: LayoutDashboard },
   { href: "/settings", label: "Cài đặt", icon: Settings },
 ];
 export default function Shell({ children }: { children: React.ReactNode }) {
@@ -91,7 +92,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
           <div className="sidebar-note">
             <strong>Quy trình PR</strong>
             <p>
-              6 workflow · AI hỗ trợ
+              8 workflow · AI hỗ trợ
               <br />
               Người dùng kiểm soát quyết định
             </p>

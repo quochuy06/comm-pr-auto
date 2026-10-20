@@ -167,6 +167,7 @@ model AuditLog {
 
 // Durable output of planning, repurposing and reporting jobs.
 model WorkflowArtifact {
+  dedupeKey     String? @unique
   id            String   @id @default(uuid())
   kind          String
   campaignId    String?

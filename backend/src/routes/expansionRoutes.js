@@ -4,6 +4,7 @@ import { roles } from "../middleware/auth.js";
 import { HttpError, text, choice, audit } from "../lib/errors.js";
 import { createJob, dispatch, failJob } from "../services/workflows.js";
 import { artifactKinds, createArtifact, checkedPlan, checkedReview, publicationHash, publishSchedule, dateInput } from "../services/expansion.js";
+import { checkedVariants, checkedReport, createWeeklyReports, sourceRevision } from "../services/insights.js";
 const router = Router();
 export const expansionInternal = Router();
 const readers = roles("ADMIN", "REVIEWER");
@@ -87,6 +88,11 @@ router.delete("/schedules/:id", roles("ADMIN", "EDITOR", "REVIEWER"), async (req
     await audit(db, req.user.email, "SCHEDULE_CANCELLED", req.params.id);
   }); res.json({ success: true });
 });
+expansionInternal.post("/weekly-reports", async (req, res) => {
+  const jobs = await createWeeklyReports();
+  jobs.forEach(dispatch);
+  res.json({ success: true, queued: jobs.length });
+});
 expansionInternal.get("/due", async (req, res) => res.json({ schedules: await prisma.postSchedule.findMany({ where: { status: "PENDING", scheduledAt: { lte: new Date() } }, orderBy: { scheduledAt: "asc" }, take: 50, select: { id: true, updatedAt: true, scheduledAt: true } }) }));
 expansionInternal.post("/publish", async (req, res) => {
   const id = text(req.body.id, "Lịch", 100);
@@ -111,10 +117,18 @@ expansionInternal.post("/callback/:kind", async (req, res) => {
   if (!ok) { await failJob(job.id, typeof req.body.error === "string" ? req.body.error.slice(0, 1000) : "Workflow thất bại."); return res.json({ success: true }); }
   let result;
   try {
-    if (kind !== "planning") throw new HttpError(400, "Loại kết quả chưa được hỗ trợ.");
-    result = { ...checkedPlan(req.body.result), review: checkedReview(req.body.result.review) };
+    const validate = { planning: checkedPlan, repurpose: checkedVariants, report: checkedReport }[kind];
+    result = { ...validate(req.body.result), review: checkedReview(req.body.result.review) };
   } catch (e) { await failJob(job.id, e.message); throw e; }
   const applied = await prisma.$transaction(async db => {
+    if (kind === "repurpose") {
+      const a = await db.workflowArtifact.findUnique({ where: { id: entityId }, include: { sourcePost: true } });
+      if (!a?.sourcePost || sourceRevision(a.sourcePost) !== a.input.sourceRevision || !["APPROVED", "PUBLISHED"].includes(a.sourcePost.status)) {
+        await db.workflowJob.updateMany({ where: { id: jobId, status: { in: ["RUNNING", "QUEUED"] } }, data: { status: "FAILED", error: "Bài gốc đã thay đổi; hãy tạo yêu cầu chuyển thể mới." } });
+        await db.workflowArtifact.updateMany({ where: { id: entityId, latestJobId: jobId, status: "PROCESSING" }, data: { status: "FAILED" } });
+        return false;
+      }
+    }
     const claimed = await db.workflowJob.updateMany({ where: { id: jobId, status: { in: ["RUNNING", "QUEUED"] } }, data: { status: "SUCCEEDED" } });
     if (!claimed.count) return false;
     const changed = await db.workflowArtifact.updateMany({ where: { id: entityId, latestJobId: jobId, status: "PROCESSING" }, data: { result, status: "PENDING_APPROVAL" } });

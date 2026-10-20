@@ -21,7 +21,7 @@ for (const file of fs
       if (n.type === "n8n-nodes-base.httpRequest")
         assert.ok(n.credentials?.httpHeaderAuth);
     }
-    if (w.nodes.some(n => n.type === "n8n-nodes-base.scheduleTrigger")) {
+    if (w.nodes.some(n => n.name === "08 Publish atomically")) {
       assert.ok(w.nodes.some(n => n.parameters.url?.endsWith("/publish")));
       return;
     }
