@@ -78,11 +78,20 @@ try {
   const card = page
     .locator("article")
     .filter({ has: page.getByRole("heading", { name: tag, exact: true }) });
-  await card.getByRole("button", { name: "Duyệt lên feed mô phỏng" }).click();
+  await card.getByRole("button", { name: "Duyệt bài để lên lịch" }).click();
   await card.waitFor({ state: "detached" });
   let saved = await db.post.findUnique({ where: { id: p.id } });
   if (saved.status !== "APPROVED" || saved.imageReviewStatus !== "MANUAL")
     throw Error("Manual approval failed");
+  // Approval no longer publishes. Explicitly schedule this isolated fixture.
+  const scheduled = await page.request.post(`/api/posts/${p.id}/schedule`, { data: { scheduledAt: new Date().toISOString() } });
+  if (!scheduled.ok()) throw Error("Scheduling failed");
+  const schedule = (await scheduled.json()).data;
+  const publication = await fetch("http://localhost:5000/api/workflow-internal/publish", {
+    method: "POST", headers: { "Content-Type": "application/json", "x-comm-token": process.env.N8N_CALLBACK_SECRET },
+    body: JSON.stringify({ id: schedule.id, expectedUpdatedAt: schedule.updatedAt }),
+  });
+  if (!publication.ok() || (await publication.json()).status !== "PUBLISHED") throw Error("Publication failed");
   await page.getByRole("button", { name: /Phản hồi bình luận/ }).click();
   const commentCard = page
     .locator("article")

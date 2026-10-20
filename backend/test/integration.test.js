@@ -386,7 +386,7 @@ test(
       });
       ids.push(c.id);
       const cj = await prisma.workflowJob.create({
-        data: { kind: "community", entityId: c.id, status: "RUNNING" },
+        data: { kind: "community", entityId: c.id, status: "RUNNING", mode: "V2" },
       });
       await prisma.comment.update({
         where: { id: c.id },
@@ -400,6 +400,8 @@ test(
           entityId: c.id,
           ok: true,
           result: {
+            issueType: "COMPLIMENT",
+            urgency: "LOW",
             sentiment: "POSITIVE",
             risk: "LOW",
             sensitive: false,
@@ -413,6 +415,7 @@ test(
       assert.equal(cr.status, 200, JSON.stringify(cr.body));
       const saved = await prisma.comment.findUnique({ where: { id: c.id } });
       assert.equal(saved.analysisStatus, "DONE");
+      assert.equal(saved.analysisMeta.issueType, "COMPLIMENT");
       const settings = await prisma.settings.findUnique({
         where: { id: "default" },
       });
@@ -421,11 +424,11 @@ test(
         settings.mode === "CONDITIONAL" ? "APPROVED" : "PENDING",
       );
       const alert = await prisma.alert.create({
-        data: { postId: p.id, trigger: "Test only", evidence: [] },
+        data: { postId: p.id, trigger: "Test only", evidence: [{ id: c.id, text: c.text }] },
       });
       ids.push(alert.id);
       const aj = await prisma.workflowJob.create({
-        data: { kind: "crisis", entityId: alert.id, status: "RUNNING" },
+        data: { kind: "crisis", entityId: alert.id, status: "RUNNING", mode: "V2" },
       });
       await prisma.alert.update({
         where: { id: alert.id },
@@ -441,6 +444,8 @@ test(
               entityId: alert.id,
               ok: true,
               result: {
+                evidenceIds: [c.id],
+                verificationSteps: ["Đối chiếu phản ánh"],
                 summary: "Cần xác minh",
                 statement: "Chúng tôi tiếp nhận phản ánh.",
                 actions: ["Xác minh thông tin"],

@@ -8,6 +8,7 @@ import {
   canAutoReply,
   severePattern,
 } from "../services/policy.js";
+import { communityMetadata, crisisMetadata, applyTriage } from "../services/triage.js";
 import { evaluateCrisis } from "../services/crisis.js";
 function validReview(r) {
   return (
@@ -77,9 +78,16 @@ export const handleN8nCallback = async (req, res) => {
     );
     return res.json({ success: true });
   }
-  let r;
+  let r, analysisMeta;
   try {
     r = checkedResult(kind, req.body.result);
+    if (job.mode === "V2" && kind === "community") {
+      analysisMeta = communityMetadata(r); r = applyTriage(r, analysisMeta);
+    }
+    if (job.mode === "V2" && kind === "crisis") {
+      const alert = await prisma.alert.findUniqueOrThrow({ where: { id: entityId } });
+      analysisMeta = crisisMetadata(r, alert.evidence);
+    }
   } catch (e) {
     await failJob(jobId, e.message);
     throw e;
@@ -176,6 +184,7 @@ export const handleN8nCallback = async (req, res) => {
           replyStatus: { notIn: ["APPROVED", "REJECTED"] },
         },
         data: {
+          ...(analysisMeta ? { analysisMeta } : {}),
           sentiment: r.sentiment,
           risk: r.risk,
           sensitive: r.sensitive,
@@ -199,6 +208,7 @@ export const handleN8nCallback = async (req, res) => {
       const changed = await db.alert.updateMany({
         where: { id: entityId, latestJobId: jobId, status: "OPEN" },
         data: {
+          ...(analysisMeta ? { analysisMeta } : {}),
           summary: r.summary,
           statement: r.statement,
           actions: r.actions,

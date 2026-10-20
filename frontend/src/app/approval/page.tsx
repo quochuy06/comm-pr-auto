@@ -122,7 +122,7 @@ function PostReview({
               </p>
             </div>
             <button className="btn" disabled={busy}>
-              Duyệt lên feed mô phỏng
+              Duyệt bài để lên lịch
             </button>
           </fieldset>
           <div className="row wrap mt">

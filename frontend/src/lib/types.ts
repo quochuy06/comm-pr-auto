@@ -12,6 +12,7 @@ export interface Campaign {
   _count?: { posts: number };
 }
 export interface ReviewComment {
+  analysisMeta?: { issueType: string; urgency: string } | null;
   id: string;
   postId: string;
   author: string;
@@ -29,6 +30,7 @@ export interface ReviewComment {
   post?: { id: string; topic: string };
 }
 export interface Alert {
+  analysisMeta?: { evidenceIds: string[]; verificationSteps: string[] } | null;
   id: string;
   postId: string;
   trigger: string;

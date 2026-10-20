@@ -71,6 +71,7 @@ function AlertCard({
               <p className="prose-content">{a.summary}</p>
             </>
           )}
+          {a.analysisMeta && <div className="mt"><h3>Cần xác minh trước khi phát ngôn</h3><ol>{a.analysisMeta.verificationSteps.map((step, i) => <li key={i}>{step}</li>)}</ol><p className="hint">Bản nháp dẫn chiếu {a.analysisMeta.evidenceIds.length} phản ánh trong danh sách bằng chứng.</p></div>}
           {a.actions?.length ? (
             <>
               <h3>Hành động đề xuất</h3>

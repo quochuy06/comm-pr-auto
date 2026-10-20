@@ -67,6 +67,7 @@ function FeedPost({ post, refresh }: { post: Post; refresh: () => void }) {
               {c.risk === "HIGH" && <Badge value="HIGH" />}
             </div>
           </div>
+          {c.analysisMeta && <p className="hint">Phân loại: {c.analysisMeta.issueType} · Ưu tiên: {c.analysisMeta.urgency}</p>}
           <p className="prose-content mt">
             {c.moderated
               ? "Bình luận đã được ẩn bởi người kiểm duyệt."

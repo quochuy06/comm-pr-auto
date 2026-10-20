@@ -11,7 +11,7 @@ const paths = {
   report: "campaign-report",
 };
 const models = { content: "post", community: "comment", crisis: "alert", planning: "workflowArtifact", repurpose: "workflowArtifact", report: "workflowArtifact" };
-export async function createJob(db, kind, entityId, mode = "CONTENT") {
+export async function createJob(db, kind, entityId, mode = ["community", "crisis"].includes(kind) ? "V2" : "CONTENT") {
   await db.workflowJob.updateMany({
     where: { kind, entityId, status: { in: ["QUEUED", "RUNNING"] } },
     data: { status: "CANCELLED", error: "Đã thay bằng yêu cầu mới." },

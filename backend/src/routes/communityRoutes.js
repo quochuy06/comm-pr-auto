@@ -9,7 +9,7 @@ const router = Router();
 router.post("/posts/:id/comments", async (req, res) => {
   const post = await prisma.post.findUnique({ where: { id: req.params.id } });
   if (!post || !visibleStatuses.includes(post.status))
-    throw new HttpError(409, "Chỉ bình luận trên bài đã duyệt.");
+    throw new HttpError(409, "Chỉ bình luận trên bài đã xuất bản.");
   const { comment, job } = await prisma.$transaction(async (db) => {
     const comment = await db.comment.create({
       data: {
