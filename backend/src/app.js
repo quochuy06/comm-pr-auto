@@ -11,6 +11,7 @@ import { authenticate, internalOnly } from "./middleware/auth.js";
 import { prepareImage } from "./controllers/imageController.js";
 import { handleN8nCallback } from "./controllers/approvalController.js";
 import { handleTextCallback } from "./controllers/textWorkflowController.js";
+import expansionRoutes, { expansionInternal } from "./routes/expansionRoutes.js";
 import { mediaDir } from "./services/images.js";
 export const app = express();
 app.disable("x-powered-by");
@@ -43,9 +44,10 @@ app.use("/media", express.static(mediaDir, { dotfiles: "deny" }));
 app.use("/api/auth", authRoutes);
 app.post("/api/webhooks/prepare-image", internalOnly, prepareImage);
 app.post("/api/webhooks/content-text", internalOnly, handleTextCallback);
+app.use("/api/workflow-internal", internalOnly, expansionInternal);
 app.post("/api/webhooks/:kind", internalOnly, handleN8nCallback);
 app.use("/api", authenticate);
-app.use("/api", coreRoutes, approvalRoutes, communityRoutes);
+app.use("/api", coreRoutes, approvalRoutes, communityRoutes, expansionRoutes);
 app.use("/api/posts", postRoutes);
 app.use((req, res) =>
   res.status(404).json({ success: false, message: "Không tìm thấy API." }),

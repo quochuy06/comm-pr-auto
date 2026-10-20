@@ -21,6 +21,10 @@ for (const file of fs
       if (n.type === "n8n-nodes-base.httpRequest")
         assert.ok(n.credentials?.httpHeaderAuth);
     }
+    if (w.nodes.some(n => n.type === "n8n-nodes-base.scheduleTrigger")) {
+      assert.ok(w.nodes.some(n => n.parameters.url?.endsWith("/publish")));
+      return;
+    }
     if (!w.connections["09 Generation succeeded"]) {
       assert.ok(w.nodes.some(n => n.name === "14d Inspect image with Gemini"));
       assert.ok(w.connections["14b Image available"].main[1].length);

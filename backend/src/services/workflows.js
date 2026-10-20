@@ -6,8 +6,11 @@ const paths = {
   content: "generate-post",
   community: "analyze-comment",
   crisis: "handle-crisis",
+  planning: "plan-campaign",
+  repurpose: "repurpose-content",
+  report: "campaign-report",
 };
-const models = { content: "post", community: "comment", crisis: "alert" };
+const models = { content: "post", community: "comment", crisis: "alert", planning: "workflowArtifact", repurpose: "workflowArtifact", report: "workflowArtifact" };
 export async function createJob(db, kind, entityId, mode = "CONTENT") {
   await db.workflowJob.updateMany({
     where: { kind, entityId, status: { in: ["QUEUED", "RUNNING"] } },
@@ -21,6 +24,10 @@ export async function createJob(db, kind, entityId, mode = "CONTENT") {
   return job;
 }
 async function contextFor(job) {
+  if (["planning", "repurpose", "report"].includes(job.kind)) {
+    const artifact = await prisma.workflowArtifact.findUniqueOrThrow({ where: { id: job.entityId } });
+    return artifact.input;
+  }
   if (job.kind === "content") {
     const p = await prisma.post.findUniqueOrThrow({
       where: { id: job.entityId },
@@ -77,6 +84,8 @@ export async function failJob(id, message) {
         where: { id: j.entityId, latestJobId: id, status: "PENDING_APPROVAL" },
         data: { imageReviewStatus: "ERROR", imageError: message },
       });
+    if (["planning", "repurpose", "report"].includes(j.kind))
+      await db.workflowArtifact.updateMany({ where: { id: j.entityId, latestJobId: id }, data: { status: "FAILED" } });
     if (j.kind === "community")
       await db.comment.updateMany({
         where: { id: j.entityId, latestJobId: id },

@@ -20,6 +20,7 @@ export const useAuth = () => useContext(AuthContext);
 const links = [
   { href: "/", label: "Tổng quan", icon: LayoutDashboard },
   { href: "/campaigns", label: "Chiến dịch", icon: FolderOpen },
+  { href: "/planning", label: "Kế hoạch & lịch đăng", icon: FolderOpen },
   { href: "/studio", label: "Content Studio", icon: Sparkles },
   { href: "/approval", label: "Hàng đợi duyệt", icon: CheckCheck },
   { href: "/simulator", label: "Feed & bình luận", icon: MessageSquare },
@@ -88,9 +89,9 @@ export default function Shell({ children }: { children: React.ReactNode }) {
             ))}
           </nav>
           <div className="sidebar-note">
-            <strong>Demo giữa kỳ</strong>
+            <strong>Quy trình PR</strong>
             <p>
-              3 workflow · AI hỗ trợ
+              6 workflow · AI hỗ trợ
               <br />
               Người dùng kiểm soát quyết định
             </p>

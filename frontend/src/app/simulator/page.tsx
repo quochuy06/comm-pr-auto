@@ -157,7 +157,7 @@ export default function SimulatorPage() {
   const { data, error, loading, refresh } = useResource<Post[]>("/posts", 5000);
   const posts =
     data?.filter((p) =>
-      ["APPROVED", "PUBLISHED", "CRISIS_ALERT"].includes(p.status),
+      ["PUBLISHED", "CRISIS_ALERT"].includes(p.status),
     ) || [];
   return (
     <>
@@ -173,7 +173,7 @@ export default function SimulatorPage() {
           <Empty>
             {loading
               ? "Đang tải bảng tin…"
-              : "Chưa có bài được duyệt. Tạo bài trong Studio rồi kiểm tra hàng đợi duyệt."}
+              : "Chưa có bài đã đăng. Duyệt bài rồi đặt lịch tại Kế hoạch & lịch đăng."}
           </Empty>
         )}
       </div>

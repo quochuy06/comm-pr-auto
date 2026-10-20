@@ -1,4 +1,4 @@
-export const visibleStatuses = ["APPROVED", "PUBLISHED", "CRISIS_ALERT"];
+export const visibleStatuses = ["PUBLISHED", "CRISIS_ALERT"];
 export const severePattern =
   /(tử vong|chết người|nhập viện|ngộ độc|cháy nổ|đe dọa|kiện ra tòa|tự tử|suicide|hospitalized|poisoning)/iu;
 export function reviewPasses(review) {
