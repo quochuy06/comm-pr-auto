@@ -5,6 +5,7 @@ import { text, HttpError, audit } from "../lib/errors.js";
 import { createJob, dispatch } from "../services/workflows.js";
 import { visibleStatuses } from "../services/policy.js";
 import { evaluateCrisis } from "../services/crisis.js";
+import { approveFacebookReply } from "../services/facebookCommunity.js";
 const router = Router();
 router.post("/posts/:id/comments", async (req, res) => {
   const post = await prisma.post.findUnique({ where: { id: req.params.id } });
@@ -30,7 +31,7 @@ router.get("/comments", async (req, res) =>
   res.json({
     success: true,
     data: await prisma.comment.findMany({
-      include: { post: { select: { id: true, topic: true } } },
+      include: { post: { select: { id: true, topic: true } }, facebookReply: true },
       orderBy: { createdAt: "desc" },
       take: 200,
     }),
@@ -43,6 +44,7 @@ router.post(
     const job = await prisma.$transaction(async (db) => {
       const c = await db.comment.findUnique({ where: { id: req.params.id } });
       if (!c) throw new HttpError(404, "Không tìm thấy bình luận.");
+      if (c.remoteDeleted) throw new HttpError(409, "Bình luận đã bị xóa trên Facebook.");
       if (["APPROVED", "REJECTED"].includes(c.replyStatus))
         throw new HttpError(409, "Phản hồi đã được xử lý.");
       const changed = await db.comment.updateMany({
@@ -65,6 +67,12 @@ router.patch(
   roles("ADMIN", "REVIEWER"),
   async (req, res) => {
     await prisma.$transaction(async (db) => {
+      const initial = await db.comment.findUnique({ where: { id: req.params.id } });
+      if (initial?.source === "FACEBOOK") {
+        await db.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${initial.externalId}))::text`;
+        const current = await db.comment.findUniqueOrThrow({ where: { id: initial.id } });
+        return approveFacebookReply(db, current, req.body, req.user.email);
+      }
       const result = await db.comment.updateMany({
         where: {
           id: req.params.id,

@@ -12,6 +12,11 @@ export interface Campaign {
   _count?: { posts: number };
 }
 export interface ReviewComment {
+  source?: string;
+  externalId?: string | null;
+  sourceHash?: string | null;
+  remoteDeleted?: boolean;
+  facebookReply?: { id: string; status: string; text: string; sourceHash: string; externalId: string | null; error: string | null; automatic?: boolean } | null;
   analysisMeta?: { issueType: string; urgency: string } | null;
   id: string;
   postId: string;

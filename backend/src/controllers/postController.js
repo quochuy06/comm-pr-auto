@@ -13,7 +13,7 @@ const statuses = [
 ];
 const include = {
   campaign: true,
-  comments: { orderBy: { createdAt: "asc" } },
+  comments: { orderBy: { createdAt: "asc" }, include: { facebookReply: true } },
   alerts: { orderBy: { createdAt: "desc" } },
 };
 export const getPosts = async (req, res) => {

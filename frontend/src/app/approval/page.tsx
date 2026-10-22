@@ -13,6 +13,7 @@ import {
 } from "@/components/ui";
 import { ImageAssessment } from "@/components/image-assessment";
 import { useAuth } from "@/components/shell";
+import { FacebookReplyDelivery } from "@/components/facebook";
 function PostReview({
   post,
   refresh,
@@ -192,14 +193,17 @@ function CommentReview({
         <Badge value={c.analysisStatus} />
       </div>
       <p className="prose-content mt">{c.text}</p>
+      <p className="hint">Nguồn: {c.source === "FACEBOOK" ? "Facebook Page · phản hồi sẽ được gửi công khai sau khi duyệt" : "Mô phỏng"}{c.remoteDeleted ? " · Bình luận đã bị xóa" : ""}</p>
+      <FacebookReplyDelivery comment={c} refresh={refresh} />
       <Notice error={error} />
       <p className="hint mb">{c.reason || "Chờ kết quả phân tích."}</p>
-      {c.replyStatus === "PENDING" && (
+      {c.replyStatus === "PENDING" && !c.remoteDeleted && (
         <form
           onSubmit={(e) => {
             e.preventDefault();
             void act("reply", {
               replyText: new FormData(e.currentTarget).get("replyText"),
+              ...(c.source === "FACEBOOK" ? { confirmFacebook: new FormData(e.currentTarget).get("confirmFacebook") === "on", sourceHash: c.sourceHash } : {}),
             });
           }}
         >
@@ -213,9 +217,10 @@ function CommentReview({
             required
             disabled={!canReview || busy}
           />
+          {c.source === "FACEBOOK" && <label className="mt"><input type="checkbox" name="confirmFacebook" required disabled={!canReview || busy} /> Tôi đã kiểm tra nội dung và xác nhận gửi phản hồi công khai lên Facebook.</label>}
           <div className="row wrap mt">
             <button disabled={!canReview || busy} className="btn">
-              Duyệt phản hồi
+              {c.source === "FACEBOOK" ? "Duyệt và gửi Facebook" : "Duyệt phản hồi"}
             </button>
             <button
               disabled={!canReview || busy}
@@ -228,7 +233,7 @@ function CommentReview({
           </div>
         </form>
       )}
-      {c.analysisStatus === "FAILED" && (
+      {c.analysisStatus === "FAILED" && !c.remoteDeleted && (
         <button
           className="btn secondary"
           disabled={!canReview || busy}
@@ -252,13 +257,13 @@ export default function ApprovalPage() {
     ) || [];
   const pendingComments =
     comments.data?.filter(
-      (c) => c.replyStatus === "PENDING" || c.analysisStatus === "FAILED",
+      (c) => !c.remoteDeleted && (c.replyStatus === "PENDING" || c.analysisStatus === "FAILED" || ["PENDING", "SENDING", "FAILED", "UNCERTAIN"].includes(c.facebookReply?.status || "")),
     ) || [];
   return (
     <>
       <PageTitle
         title="Hàng đợi duyệt"
-        description="Kiểm tra, hiệu đính và quyết định trước khi nội dung xuất hiện trên feed mô phỏng."
+        description="Kiểm tra bài viết và hiệu đính phản hồi. Phản hồi Facebook yêu cầu xác nhận gửi công khai."
       />
       <Notice error={posts.error || comments.error} />
       <div className="tabs">
@@ -303,7 +308,7 @@ export default function ApprovalPage() {
         ) : pendingComments.length ? (
           pendingComments.map((c) => (
             <CommentReview
-              key={c.id + c.replyStatus + c.analysisStatus}
+              key={c.id + c.replyStatus + c.analysisStatus + c.sourceHash}
               comment={c}
               refresh={comments.refresh}
               canReview={canReview}

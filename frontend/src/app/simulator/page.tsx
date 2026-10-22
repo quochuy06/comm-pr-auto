@@ -12,6 +12,7 @@ import {
   dateTime,
 } from "@/components/ui";
 import { useAuth } from "@/components/shell";
+import { FacebookReplyDelivery } from "@/components/facebook";
 function FeedPost({ post, refresh }: { post: Post; refresh: () => void }) {
   const [comment, setComment] = useState("");
   const [busy, setBusy] = useState(false);
@@ -45,7 +46,7 @@ function FeedPost({ post, refresh }: { post: Post; refresh: () => void }) {
         ?.filter((a) => a.publishedAt)
         .map((a) => (
           <div className="notice info mt" key={a.id}>
-            <strong>Phản hồi chính thức · Đã được người duyệt kiểm tra</strong>
+            <strong>Thông cáo đã duyệt trong web</strong>
             <p className="prose-content mt">{a.statement}</p>
           </div>
         ))}
@@ -58,6 +59,7 @@ function FeedPost({ post, refresh }: { post: Post; refresh: () => void }) {
         <div className="comment" key={c.id}>
           <div className="row between wrap">
             <strong>{c.author}</strong>
+            <small>{c.source === "FACEBOOK" ? "Facebook" : "Mô phỏng"}{c.remoteDeleted ? " · Đã xóa trên Facebook" : ""}</small>
             <div className="row wrap">
               <Badge
                 value={
@@ -81,10 +83,11 @@ function FeedPost({ post, refresh }: { post: Post; refresh: () => void }) {
           )}
           {c.replyText && !c.moderated && (
             <div className="reply">
-              <strong>Phản hồi từ nhóm PR</strong>
+              <strong>{c.source === "FACEBOOK" ? "Phản hồi đã duyệt" : "Phản hồi từ nhóm PR"}</strong>
               <p className="prose-content">{c.replyText}</p>
             </div>
           )}
+          <FacebookReplyDelivery comment={c} refresh={refresh} />
           {c.replyStatus === "PENDING" && (
             <p className="hint">Phản hồi đang chờ người duyệt.</p>
           )}
@@ -107,7 +110,7 @@ function FeedPost({ post, refresh }: { post: Post; refresh: () => void }) {
                 }
               }}
             >
-              {c.moderated ? "Hiện lại bình luận" : "Ẩn bình luận"}
+              {c.moderated ? "Hiện lại trong web" : "Ẩn trong web"}
             </button>
           )}
         </div>
@@ -164,7 +167,7 @@ export default function SimulatorPage() {
     <>
       <PageTitle
         title="Feed & bình luận"
-        description="Không gian mô phỏng mạng xã hội. Bài và bình luận lưu thật trong hệ thống; chưa đăng lên Facebook."
+        description="Theo dõi bài đã xuất bản, bình luận mô phỏng và bình luận đồng bộ từ Facebook Page."
       />
       <Notice error={error} />
       <div className="feed stack">

@@ -5,7 +5,7 @@ import { audit } from "../lib/errors.js";
 export async function evaluateCrisis(commentId) {
   const job = await prisma.$transaction(async (db) => {
     const comment = await db.comment.findUnique({ where: { id: commentId } });
-    if (!comment) return null;
+    if (!comment || comment.remoteDeleted) return null;
     // Serialize alert creation for a post so simultaneous callbacks do not create duplicate open alerts.
     await db.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${comment.postId}))::text`;
     const settings = await db.settings.upsert({
@@ -16,6 +16,7 @@ export async function evaluateCrisis(commentId) {
     const recent = await db.comment.findMany({
       where: {
         postId: comment.postId,
+        remoteDeleted: false,
         createdAt: {
           gte: new Date(Date.now() - settings.windowMinutes * 60000),
         },

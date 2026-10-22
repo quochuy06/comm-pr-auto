@@ -4,6 +4,7 @@ export function build() {
   for(const kind of ['community','crisis']) {
     const s={...specs[kind],name:kind==='community'?'Phúc · 01 · Phân tích và phản hồi cộng đồng':'Phúc · 02 · Xử lý khủng hoảng có bằng chứng'};
     if(kind==='community') {
+      s.instruction += ' Chỉ xác nhận địa chỉ, giờ mở cửa, giá và tiện ích khi bài viết có thông tin xác thực tương ứng. Nếu không có, trả lời rõ chưa có thông tin xác nhận; không tự khẳng định cơ sở có thật hoặc hứa đón khách. Nếu bài ghi thương hiệu giả lập/demo/đồ án, nhắc đúng bối cảnh đó khi người dùng hỏi dịch vụ thực tế.';
       s.instruction += ' Bổ sung issueType:"INFORMATION"|"COMPLIMENT"|"COMPLAINT"|"SAFETY"|"LEGAL"|"OTHER" và urgency:"LOW"|"MEDIUM"|"HIGH". SAFETY/LEGAL luôn nhạy cảm, urgency HIGH. Khiếu nại COMPLAINT phải chuyển người duyệt.';
       s.validate += " && ['INFORMATION','COMPLIMENT','COMPLAINT','SAFETY','LEGAL','OTHER'].includes(d.issueType)&&['LOW','MEDIUM','HIGH'].includes(d.urgency)";
     } else {

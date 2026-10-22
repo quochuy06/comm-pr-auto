@@ -14,6 +14,7 @@ import { handleTextCallback } from "./controllers/textWorkflowController.js";
 import insightRoutes from "./routes/insightRoutes.js";
 import expansionRoutes, { expansionInternal } from "./routes/expansionRoutes.js";
 import { mediaDir } from "./services/images.js";
+import facebookRoutes, { facebookWebhook } from "./routes/facebookRoutes.js";
 export const app = express();
 app.disable("x-powered-by");
 const origins = (
@@ -32,6 +33,8 @@ app.use((req, res, next) => {
       .json({ success: false, message: "Nguồn yêu cầu không được cho phép." });
   next();
 });
+app.get("/api/facebook/webhook", facebookWebhook);
+app.post("/api/facebook/webhook", express.raw({ type: "application/json", limit: "256kb" }), facebookWebhook);
 app.use(express.json({ limit: "128kb" }));
 app.get("/health", async (req, res) => {
   try {
@@ -48,7 +51,7 @@ app.post("/api/webhooks/content-text", internalOnly, handleTextCallback);
 app.use("/api/workflow-internal", internalOnly, expansionInternal);
 app.post("/api/webhooks/:kind", internalOnly, handleN8nCallback);
 app.use("/api", authenticate);
-app.use("/api", coreRoutes, approvalRoutes, communityRoutes, expansionRoutes, insightRoutes);
+app.use("/api", coreRoutes, approvalRoutes, communityRoutes, expansionRoutes, insightRoutes, facebookRoutes);
 app.use("/api/posts", postRoutes);
 app.use((req, res) =>
   res.status(404).json({ success: false, message: "Không tìm thấy API." }),

@@ -94,6 +94,14 @@ model Post {
 }
 
 model Comment {
+  autoReplyEligible Boolean @default(false)
+  source         String @default("SIMULATOR")
+  externalId     String? @unique
+  pageId         String?
+  sourceHash     String?
+  remoteDeleted  Boolean @default(false)
+  syncedAt       DateTime?
+  facebookReply  FacebookReply?
   analysisMeta   Json?
   id             String        @id @default(uuid())
   postId         String
@@ -199,6 +207,9 @@ model PostSchedule {
   externalPostId String? @unique
   permalink   String?
   attemptedAt DateTime?
+  commentsSyncedAt DateTime?
+  commentSyncError String?
+  metricSnapshots FacebookMetricSnapshot[]
   status      String   @default("PENDING")
   error       String?  @db.Text
   publishedAt DateTime?
@@ -206,4 +217,78 @@ model PostSchedule {
   updatedAt   DateTime @updatedAt
 
   @@index([status, scheduledAt])
+}
+
+model FacebookReply {
+  automatic Boolean @default(false)
+  automationVersion DateTime?
+  id String @id @default(uuid())
+  commentId String @unique
+  comment Comment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  pageId String
+  sourceHash String
+  text String @db.Text
+  status String @default("PENDING")
+  externalId String? @unique
+  attemptedAt DateTime?
+  error String? @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([status, createdAt])
+}
+
+model FacebookEvent {
+  id String @id @default(uuid())
+  dedupeKey String @unique
+  pageId String
+  payload Json
+  status String @default("PENDING")
+  attempts Int @default(0)
+  error String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([status, createdAt])
+}
+
+model FacebookMetricSnapshot {
+  id String @id @default(uuid())
+  scheduleId String
+  schedule PostSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  metrics Json
+  capturedAt DateTime @default(now())
+  @@index([scheduleId, capturedAt])
+}
+
+model FacebookAutomation {
+  id String @id @default("default")
+  pageId String
+  commentEnabled Boolean @default(false)
+  messengerEnabled Boolean @default(false)
+  commentEnabledAt DateTime?
+  messengerEnabledAt DateTime?
+  commentTemplate String @default("Chào {name}! Hiên Cà Phê có thể giúp gì cho bạn?")
+  messengerTemplate String @default("Chào {name}! Hiên Cà Phê có thể giúp gì cho bạn? Bạn cứ gửi câu hỏi tại đây nhé.")
+  messengerSyncedAt DateTime?
+  messengerSyncError String?
+  version DateTime @default(now())
+}
+
+model FacebookInboxReply {
+  id String @id @default(uuid())
+  inboundId String @unique
+  pageId String
+  senderId String
+  senderName String
+  incomingText String @db.Text
+  incomingAt DateTime
+  replyText String @db.Text
+  automationVersion DateTime
+  status String @default("PENDING")
+  externalId String? @unique
+  attemptedAt DateTime?
+  error String? @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([pageId, senderId, createdAt])
+  @@index([status, createdAt])
 }

@@ -111,6 +111,7 @@ export const handleN8nCallback = async (req, res) => {
       kind === "content" ? "post" : kind === "community" ? "comment" : "alert";
     const current = await db[model].findUnique({ where: { id: entityId } });
     if (!current || current.latestJobId !== jobId) return false;
+    if (kind === "community" && current.remoteDeleted) return false;
     if (
       kind === "content" &&
       current.status !== (job.mode === "CONTENT" ? "DRAFT" : "PENDING_APPROVAL")
@@ -176,12 +177,13 @@ export const handleN8nCallback = async (req, res) => {
         r.sentiment = "CRISIS";
         r.sensitive = true;
       }
-      const auto = canAutoReply(settings, r, current.text);
+      const auto = current.source !== "FACEBOOK" && canAutoReply(settings, r, current.text);
+      const keepReply = current.source === "FACEBOOK" && current.replyStatus === "APPROVED";
       const changed = await db.comment.updateMany({
         where: {
           id: entityId,
           latestJobId: jobId,
-          replyStatus: { notIn: ["APPROVED", "REJECTED"] },
+          replyStatus: keepReply ? "APPROVED" : { notIn: ["APPROVED", "REJECTED"] },
         },
         data: {
           ...(analysisMeta ? { analysisMeta } : {}),
@@ -189,10 +191,11 @@ export const handleN8nCallback = async (req, res) => {
           risk: r.risk,
           sensitive: r.sensitive,
           analysisStatus: "DONE",
+          autoReplyEligible: canAutoReply(settings, r, current.text),
           reason: r.reason + " · Kiểm tra: " + r.review.reason,
           suggestedReply: r.reply,
-          replyText: auto ? r.reply : null,
-          replyStatus: auto ? "APPROVED" : "PENDING",
+          replyText: keepReply ? current.replyText : auto ? r.reply : null,
+          replyStatus: keepReply || auto ? "APPROVED" : "PENDING",
         },
       });
       if (!changed.count)
