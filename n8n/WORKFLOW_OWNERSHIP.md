@@ -56,7 +56,7 @@ Báo cáo tuần tự động chạy thứ Hai 08:00 giờ Việt Nam; có thể
 
 ## Bổ sung Facebook Publishing — 22/10/2026
 
-Huy phụ trách phần mở rộng workflow Publishing trên nhánh `codex/huy-facebook-publishing`: schema lưu kết quả gửi, adapter Facebook, khóa bài/lịch khi gửi, đối soát lỗi chưa rõ kết quả, giao diện chọn nơi xuất bản và kiểm thử đi kèm. Tiếp tục dùng workflow n8n Publishing hiện có, token chỉ nằm phía backend.
+Huy phụ trách phần mở rộng workflow Publishing trên nhánh `feat/huy-facebook-publishing`: schema lưu kết quả gửi, adapter Facebook, khóa bài/lịch khi gửi, đối soát lỗi chưa rõ kết quả, giao diện chọn nơi xuất bản và kiểm thử đi kèm. Tiếp tục dùng workflow n8n Publishing hiện có, token chỉ nằm phía backend.
 
 - Bài đã duyệt có thể đặt lịch lên feed mô phỏng hoặc Facebook Page; lịch cũ giữ nguyên kênh mô phỏng.
 - Đã nghiệm thu một bài có ảnh trên Page Hiên Cà Phê lúc 12:25:06 ngày 22/10/2026 và đọc lại từ Meta API để kiểm tra nội dung/ảnh.
