@@ -2,7 +2,16 @@
 
 Ứng dụng Next.js + Express + Prisma/PostgreSQL + n8n + Gemini. **8 workflow, mỗi thành viên phụ trách 2 luồng**: Hoàng (văn bản/ảnh), Huy (kế hoạch/lịch đăng), Bảo (chuyển thể/báo cáo), Phúc (cộng đồng/khủng hoảng). Xem [phân công và nhánh Git](n8n/WORKFLOW_OWNERSHIP.md).
 
-Website dùng feed mô phỏng, còn tài khoản, dữ liệu, AI và workflow chạy thật. Facebook Page dành cho giai đoạn cuối kỳ.
+Website có feed mô phỏng và tùy chọn đăng bài đã duyệt lên Facebook Page theo lịch. Tài khoản, dữ liệu, AI và workflow chạy thật. Luồng Facebook cần cấu hình token riêng và nghiệm thu bằng một bài đã duyệt trên Page thật.
+
+## Đăng lên Facebook Page
+- Sau khi sao lưu database, chạy `npm run db:migrate` và `npm run db:generate` trong `backend/`.
+- Lưu `FACEBOOK_PAGE_ID`, `FACEBOOK_PAGE_ACCESS_TOKEN`, `FACEBOOK_GRAPH_API_VERSION` (ví dụ `v26.0`) trong `.local/facebook.env` ở root, hoặc biến môi trường backend. Dùng token Page, không dùng token tài khoản cá nhân. Không commit hoặc gửi token vào frontend/n8n.
+- Trong **Kế hoạch & lịch đăng**, kiểm tra đúng tên Page, chọn **Facebook Page**, bài đã duyệt, giờ đăng và xác nhận đăng công khai. Lịch cũ và mặc định vẫn lên feed mô phỏng.
+- Hỗ trợ bài Facebook với ảnh PNG/JPEG lưu nội bộ, tối đa 6 MB. Workflow n8n Publishing hiện có tiếp tục kiểm tra lịch mỗi phút. Khi thành công, lịch có ID và nút xem bài Facebook.
+- Token hết hạn/thiếu quyền: sửa cấu hình và đặt lại lịch lỗi. Khi trạng thái **Cần đối soát Facebook**, không gửi lại: quản trị viên kiểm tra Page rồi nhập ID `PageID_PostID` để xác minh bài đã có. Nếu chưa tìm thấy bài, giữ lịch để điều tra; không có tự động mở khóa/gửi lại khi kết quả chưa rõ.
+- Backend giữ khóa bài đang gửi, chặn callback/lịch lặp và không tự đăng lại khi mạng mất phản hồi. Thông cáo khủng hoảng vẫn cần người duyệt; chưa nối đăng thông cáo, webhook bình luận, phản hồi hay Insights Facebook.
+- Kiểm thử tự động dùng Facebook giả lập; kiểm tra token đọc Page không thay thế nghiệm thu đăng thật. Hướng dẫn chi tiết trên máy: `docs/FACEBOOK_SETUP.md`.
 
 ## Máy hiện tại
 - Web: http://localhost:3000

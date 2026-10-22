@@ -6,6 +6,7 @@ const statuses = [
   "DRAFT",
   "PENDING_APPROVAL",
   "APPROVED",
+  "PUBLISHING",
   "PUBLISHED",
   "REJECTED",
   "CRISIS_ALERT",
@@ -116,6 +117,7 @@ export const processPostImage = async (req, res) => {
   const { post, job } = await prisma.$transaction(async (db) => {
     const current = await db.post.findUnique({ where: { id: req.params.id } });
     if (!current) throw new HttpError(404, "Không tìm thấy bài.");
+    if (current.status === "PUBLISHING") throw new HttpError(409, "Bài đang gửi Facebook hoặc chờ đối soát; chưa thể sửa ảnh.");
     if (current.status === "CRISIS_ALERT")
       throw new HttpError(
         409,

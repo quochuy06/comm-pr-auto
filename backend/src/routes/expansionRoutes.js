@@ -3,8 +3,10 @@ import prisma from "../prisma.js";
 import { roles } from "../middleware/auth.js";
 import { HttpError, text, choice, audit } from "../lib/errors.js";
 import { createJob, dispatch, failJob } from "../services/workflows.js";
-import { artifactKinds, createArtifact, checkedPlan, checkedReview, publicationHash, publishSchedule, dateInput } from "../services/expansion.js";
+import { artifactKinds, createArtifact, checkedPlan, checkedReview, publicationHash, dateInput } from "../services/expansion.js";
 import { checkedVariants, checkedReport, createWeeklyReports, sourceRevision } from "../services/insights.js";
+import { facebookConfig, createFacebookClient, FacebookError } from "../services/facebook.js";
+import { publishDueSchedule, recoverFacebookSends, reconcileFacebookPost } from "../services/facebookPublishing.js";
 const router = Router();
 export const expansionInternal = Router();
 const readers = roles("ADMIN", "REVIEWER");
@@ -64,19 +66,40 @@ router.post("/artifacts/:id/items/:index", editors, async (req, res) => {
   res.json({ success: true, data: result.post });
 });
 router.get("/schedules", async (req, res) => res.json({ success: true, data: await prisma.postSchedule.findMany({ orderBy: { scheduledAt: "desc" }, take: 100, include: { post: true } }) }));
+router.get("/facebook/connection", async (req, res) => {
+  try { res.json({ success: true, data: { connected: true, ...await createFacebookClient().identity() } }); }
+  catch (e) { res.json({ success: true, data: { connected: false, error: e instanceof FacebookError ? e.message : "Không kiểm tra được kết nối Facebook." } }); }
+});
+router.post("/schedules/:id/reconcile", roles("ADMIN"), async (req, res) => {
+  const externalPostId = text(req.body.externalPostId, "ID bài Facebook", 100);
+  try { res.json({ success: true, data: await reconcileFacebookPost(prisma, req.params.id, externalPostId, req.user.email) }); }
+  catch (e) { if (e instanceof FacebookError) throw new HttpError(409, e.message); throw e; }
+});
 router.post("/posts/:id/schedule", roles("ADMIN", "EDITOR", "REVIEWER"), async (req, res) => {
   const scheduledAt = dateInput(req.body.scheduledAt, "Giờ đăng");
+  const target = choice(req.body.target ?? "SIMULATOR", ["SIMULATOR", "FACEBOOK"], "Kênh xuất bản");
+  let pageId = null;
+  if (target === "FACEBOOK") {
+    if (req.body.confirmFacebook !== true) throw new HttpError(400, "Cần xác nhận bài sẽ được đăng công khai lên Facebook.");
+    try { pageId = facebookConfig().pageId; }
+    catch (e) { throw new HttpError(400, e instanceof FacebookError ? e.message : "Chưa cấu hình Facebook."); }
+  }
   if (scheduledAt < new Date(Date.now() - 60000)) throw new HttpError(400, "Chọn giờ hiện tại hoặc tương lai.");
   const data = await prisma.$transaction(async db => {
     const p = await db.post.findUniqueOrThrow({ where: { id: req.params.id } });
     if (p.status !== "APPROVED" || !p.approvedBy || !p.bannerUrl || !p.content || !p.headline) throw new HttpError(409, "Chỉ lên lịch bài đủ nội dung, ảnh và đã duyệt.");
     const existing = await db.postSchedule.findUnique({ where: { postId: p.id } });
     if (existing) await db.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${existing.id}))::text`;
+    if (existing) {
+      const locked = await db.postSchedule.findUniqueOrThrow({ where: { id: existing.id } });
+      if (["SENDING", "UNCERTAIN", "PUBLISHED"].includes(locked.status) || locked.externalPostId) throw new HttpError(409, "Lịch đã gửi hoặc đang đối soát; không thể đặt lại để tránh đăng trùng.");
+    }
+    if (target === "FACEBOOK" && (p.platform !== "Facebook" || !/^\/media\/[a-f0-9-]+\.(png|jpg)$/.test(p.bannerUrl))) throw new HttpError(400, "Đăng Facebook cần bài cho Facebook và ảnh PNG/JPEG đã lưu nội bộ.");
     // Lock the article too: changes to approval/image must not race scheduling.
     const unchanged = await db.post.updateMany({ where: { id: p.id, status: "APPROVED", updatedAt: p.updatedAt }, data: { status: "APPROVED" } });
     if (!unchanged.count) throw new HttpError(409, "Bài vừa thay đổi.");
-    const data = await db.postSchedule.upsert({ where: { postId: p.id }, create: { postId: p.id, scheduledAt, contentHash: publicationHash(p) }, update: { scheduledAt, contentHash: publicationHash(p), status: "PENDING", error: null, publishedAt: null } });
-    await audit(db, req.user.email, "POST_SCHEDULED", p.id, scheduledAt.toISOString());
+    const data = await db.postSchedule.upsert({ where: { postId: p.id }, create: { postId: p.id, scheduledAt, contentHash: publicationHash(p), target, pageId }, update: { scheduledAt, contentHash: publicationHash(p), target, pageId, status: "PENDING", error: null, publishedAt: null, attemptedAt: null } });
+    await audit(db, req.user.email, "POST_SCHEDULED", p.id, `${scheduledAt.toISOString()} · ${target}${pageId ? ` · Page ${pageId}` : ""}`);
     return data;
   }); res.json({ success: true, data });
 });
@@ -93,11 +116,17 @@ expansionInternal.post("/weekly-reports", async (req, res) => {
   jobs.forEach(dispatch);
   res.json({ success: true, queued: jobs.length });
 });
-expansionInternal.get("/due", async (req, res) => res.json({ schedules: await prisma.postSchedule.findMany({ where: { status: "PENDING", scheduledAt: { lte: new Date() } }, orderBy: { scheduledAt: "asc" }, take: 50, select: { id: true, updatedAt: true, scheduledAt: true } }) }));
+expansionInternal.get("/due", async (req, res) => {
+  await recoverFacebookSends(prisma);
+  res.json({ schedules: await prisma.postSchedule.findMany({ where: { status: "PENDING", scheduledAt: { lte: new Date() } }, orderBy: { scheduledAt: "asc" }, take: 50, select: { id: true, updatedAt: true, scheduledAt: true } }) });
+});
 expansionInternal.post("/publish", async (req, res) => {
   const id = text(req.body.id, "Lịch", 100);
   const expected = dateInput(req.body.expectedUpdatedAt, "Phiên bản lịch").toISOString();
-  res.json(await prisma.$transaction(db => publishSchedule(db, id, expected)));
+  const result = await publishDueSchedule(prisma, id, expected);
+  // Preserve the installed n8n summary contract; DB/UI retain UNCERTAIN and
+  // require reconciliation. FAILED here is a tick outcome, not a retry request.
+  res.json({ ...result, publicationStatus: result.status, status: result.status === "UNCERTAIN" ? "FAILED" : result.status });
 });
 expansionInternal.post("/publisher-log", async (req, res) => {
   const counts = {};

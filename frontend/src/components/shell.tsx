@@ -138,8 +138,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
             {children}
           </main>
           <footer className="footer">
-            PR Workspace · Bài viết và phản hồi được xuất bản trên feed mô phỏng
-            của nhóm.
+            PR Workspace · Bài viết xuất bản theo kênh đã chọn. Bình luận và phản hồi hiện dùng feed mô phỏng.
           </footer>
         </div>
       </div>

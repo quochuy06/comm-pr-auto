@@ -52,4 +52,13 @@ Tên JSON có tiền tố thành viên; các hàm generator nằm trong `scripts
 4. Phúc thêm bình luận, giải thích phân loại và ngưỡng khủng hoảng; thông cáo cần người duyệt.
 5. Bảo tạo các phiên bản nền tảng, xem báo cáo theo kỳ và xuất CSV.
 
-Báo cáo tuần tự động chạy thứ Hai 08:00 giờ Việt Nam; có thể tạo theo kỳ trên web để demo ngay. Đăng bài hiện là feed mô phỏng; chuyển thể đa nền tảng chưa đồng nghĩa đăng thật lên từng mạng xã hội.
+Báo cáo tuần tự động chạy thứ Hai 08:00 giờ Việt Nam; có thể tạo theo kỳ trên web để demo ngay. Chuyển thể đa nền tảng chưa đồng nghĩa đăng thật lên từng mạng xã hội.
+
+## Bổ sung Facebook Publishing — 22/10/2026
+
+Huy phụ trách phần mở rộng workflow Publishing trên nhánh `codex/huy-facebook-publishing`: schema lưu kết quả gửi, adapter Facebook, khóa bài/lịch khi gửi, đối soát lỗi chưa rõ kết quả, giao diện chọn nơi xuất bản và kiểm thử đi kèm. Tiếp tục dùng workflow n8n Publishing hiện có, token chỉ nằm phía backend.
+
+- Bài đã duyệt có thể đặt lịch lên feed mô phỏng hoặc Facebook Page; lịch cũ giữ nguyên kênh mô phỏng.
+- Đã nghiệm thu một bài có ảnh trên Page Hiên Cà Phê lúc 12:25:06 ngày 22/10/2026 và đọc lại từ Meta API để kiểm tra nội dung/ảnh.
+- 30/30 kiểm thử backend/API/DB đạt; lint, TypeScript, production build bằng Webpack và browser desktop/mobile đạt.
+- Bình luận, phản hồi, số liệu Facebook và quản lý token dài hạn chưa thuộc commit Publishing này.

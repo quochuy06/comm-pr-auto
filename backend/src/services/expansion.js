@@ -29,6 +29,7 @@ export async function publishSchedule(db, id, expectedUpdatedAt, now = new Date(
   await db.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${id}))::text`;
   const s = await db.postSchedule.findUnique({ where: { id }, include: { post: true } });
   if (!s) throw new HttpError(404, "Không có lịch đăng.");
+  if (s.target && s.target !== "SIMULATOR") throw new HttpError(409, "Lịch Facebook phải qua bộ xuất bản Facebook.");
   if (s.status !== "PENDING" || s.updatedAt.toISOString() !== expectedUpdatedAt) return { status: "IGNORED", id };
   if (s.scheduledAt > now) return { status: "NOT_DUE", id };
   if (now - s.scheduledAt > 24 * 60 * 60 * 1000) {

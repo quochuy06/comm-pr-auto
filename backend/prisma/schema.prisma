@@ -11,6 +11,7 @@ enum PostStatus {
   DRAFT
   PENDING_APPROVAL
   APPROVED
+  PUBLISHING
   PUBLISHED
   REJECTED
   CRISIS_ALERT
@@ -193,6 +194,11 @@ model PostSchedule {
   post        Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
   scheduledAt DateTime
   contentHash String
+  target      String   @default("SIMULATOR")
+  pageId      String?
+  externalPostId String? @unique
+  permalink   String?
+  attemptedAt DateTime?
   status      String   @default("PENDING")
   error       String?  @db.Text
   publishedAt DateTime?
