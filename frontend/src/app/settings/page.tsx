@@ -4,6 +4,7 @@ import { useAuth } from "@/components/shell";
 import { useResource, send, errorMessage } from "@/lib/api";
 import type { Settings } from "@/lib/types";
 import { PageTitle, Notice } from "@/components/ui";
+import { FacebookSettings } from "@/components/facebook";
 export default function SettingsPage() {
   const { data, error, refresh } = useResource<Settings>("/settings");
   const user = useAuth();
@@ -100,7 +101,7 @@ export default function SettingsPage() {
               được tự duyệt.
             </p>
             <p>
-              <strong>Bình luận:</strong> chỉ tự trả lời khi cảm xúc tích
+              <strong>Bình luận mô phỏng:</strong> chỉ tự trả lời khi cảm xúc tích
               cực/trung tính và không nhạy cảm; trường hợp khác chuyển người
               duyệt.
             </p>
@@ -119,6 +120,7 @@ export default function SettingsPage() {
           </p>
         </section>
       </div>
+      <FacebookSettings />
     </>
   );
 }

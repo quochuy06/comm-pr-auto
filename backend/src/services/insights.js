@@ -23,7 +23,7 @@ export async function reportInput(campaignId, start, end) {
     const campaign = await db.campaign.findUniqueOrThrow({ where: { id: campaignId } });
     const period = { gte: from, lt: to };
     const postWhere = { campaignId, createdAt: period };
-    const commentWhere = { post: { campaignId }, createdAt: period };
+    const commentWhere = { post: { campaignId }, createdAt: period, remoteDeleted: false };
     const [createdPosts, publishedPosts, rejectedPosts, comments, sentiments, alerts] = await Promise.all([
       db.post.count({where:postWhere}),
       db.post.count({where:{campaignId,publishedAt:period}}),
@@ -34,9 +34,13 @@ export async function reportInput(campaignId, start, end) {
     ]);
     const analyzed = sentiments.reduce((n,s)=>n+s._count._all,0);
     const negative = sentiments.filter(s=>["NEGATIVE","CRISIS"].includes(s.sentiment)).reduce((n,s)=>n+s._count._all,0);
+    const sources = await db.comment.groupBy({ by: ["source"], where: commentWhere, _count: { _all: true } });
+    const schedules = await db.postSchedule.findMany({ where: { target: "FACEBOOK", status: "PUBLISHED", post: { campaignId } }, include: { metricSnapshots: { where: { capturedAt: period }, orderBy: { capturedAt: "desc" }, take: 1 } } });
+    const facebook = schedules.filter(s => s.metricSnapshots.length).map(s => ({ postId: s.postId, externalPostId: s.externalPostId, capturedAt: s.metricSnapshots[0].capturedAt.toISOString(), ...s.metricSnapshots[0].metrics }));
     return { campaign: { id: campaign.id, name: campaign.name }, period: { from: from.toISOString(), to: to.toISOString() }, capturedAt: new Date().toISOString(),
       metrics: { createdPosts, publishedPosts, rejectedPosts, comments, analyzedComments: analyzed, negativeComments: negative, negativeRate: analyzed ? Math.round(negative / analyzed * 10000)/100 : null, alerts },
-      definitions: "Kỳ [từ,đến). Bài từ chối: trạng thái hiện tại của bài tạo trong kỳ. Tỷ lệ tiêu cực tính trên bình luận đã phân tích. Không có reach/impression. Bài cũ chưa ghi publishedAt không tính số bài đăng." };
+      commentSources: Object.fromEntries(sources.map(s => [s.source, s._count._all])), facebook,
+      definitions: "Kỳ [từ,đến). Bài từ chối: trạng thái hiện tại của bài tạo trong kỳ. Tỷ lệ tiêu cực tính trên bình luận đã phân tích, loại bình luận đã xóa. Bình luận tách nguồn SIMULATOR/FACEBOOK. Facebook: snapshot gần nhất thu thập trong kỳ, số tích lũy của bài chứ không phải tương tác phát sinh trong kỳ. Chỉ số thiếu là null. Bài cũ chưa ghi publishedAt không tính số bài đăng." };
   }, { isolationLevel: "RepeatableRead" });
 }
 export async function createWeeklyReports() {
@@ -60,5 +64,7 @@ export const sourceRevision = publicationHash;
 export function reportCsv(a) {
   const quote = value => '"' + String(value ?? "").replace(/^[=+@\-\t\r]/, "'$&").replaceAll('"', '""') + '"';
   const rows = [["Chiến dịch",a.input.campaign.name],["Từ (bao gồm)",a.input.period.from],["Đến (không bao gồm)",a.input.period.to],...Object.entries(a.input.metrics),["Định nghĩa",a.input.definitions]];
+  for (const [source, count] of Object.entries(a.input.commentSources || {})) rows.push([`Bình luận ${source}`, count]);
+  for (const s of a.input.facebook || []) rows.push(["Facebook post", s.externalPostId], ["Thu thập", s.capturedAt], ["Reactions", s.reactions], ["Comments", s.comments], ["Shares", s.shares], ["Views", s.views]);
   return '\uFEFF'+rows.map(row=>row.map(quote).join(',')).join('\r\n');
 }

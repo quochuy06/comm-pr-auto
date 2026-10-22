@@ -14,6 +14,7 @@ const statuses = [
 const include = {
   campaign: true,
   comments: { orderBy: { createdAt: "asc" }, include: { facebookReply: true } },
+  schedule: { include: { metricSnapshots: { orderBy: { capturedAt: "desc" }, take: 1 } } },
   alerts: { orderBy: { createdAt: "desc" } },
 };
 export const getPosts = async (req, res) => {

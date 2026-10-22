@@ -58,6 +58,7 @@ export interface Job {
   createdAt: string;
 }
 export interface Post {
+  schedule?: { id: string; target: string; permalink: string | null; commentsSyncedAt: string | null; commentSyncError: string | null; metricSnapshots: { capturedAt: string; metrics: { reactions: number | null; comments: number | null; shares: number | null; views?: number | null; insightsError?: string | null; note: string } }[] } | null;
   id: string;
   topic: string;
   targetAudience: string | null;

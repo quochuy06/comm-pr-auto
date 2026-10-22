@@ -12,7 +12,7 @@ import {
   dateTime,
 } from "@/components/ui";
 import { useAuth } from "@/components/shell";
-import { FacebookReplyDelivery } from "@/components/facebook";
+import { FacebookPostControls, FacebookReplyDelivery } from "@/components/facebook";
 function FeedPost({ post, refresh }: { post: Post; refresh: () => void }) {
   const [comment, setComment] = useState("");
   const [busy, setBusy] = useState(false);
@@ -42,6 +42,7 @@ function FeedPost({ post, refresh }: { post: Post; refresh: () => void }) {
         src={post.bannerUrl}
         alt={post.headline || post.topic}
       />
+      <FacebookPostControls post={post} refresh={refresh} />
       {post.alerts
         ?.filter((a) => a.publishedAt)
         .map((a) => (

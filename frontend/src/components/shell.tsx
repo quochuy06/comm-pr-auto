@@ -96,7 +96,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
               <br />
               Người dùng kiểm soát quyết định
             </p>
-            <span className="badge">Feed mô phỏng</span>
+            <span className="badge">Feed & Facebook</span>
           </div>
         </aside>
         <div className="workspace">
@@ -138,7 +138,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
             {children}
           </main>
           <footer className="footer">
-            PR Workspace · Bài viết xuất bản theo kênh đã chọn. Bình luận và phản hồi hiện dùng feed mô phỏng.
+            PR Workspace · Bài viết xuất bản theo kênh đã chọn. Phản hồi theo mẫu được quản trị viên bật trước; trường hợp khác cần người duyệt.
           </footer>
         </div>
       </div>
