@@ -10,8 +10,26 @@ Website có feed mô phỏng và tùy chọn đăng bài đã duyệt lên Faceb
 - Trong **Kế hoạch & lịch đăng**, kiểm tra đúng tên Page, chọn **Facebook Page**, bài đã duyệt, giờ đăng và xác nhận đăng công khai. Lịch cũ và mặc định vẫn lên feed mô phỏng.
 - Hỗ trợ bài Facebook với ảnh PNG/JPEG lưu nội bộ, tối đa 6 MB. Workflow n8n Publishing hiện có tiếp tục kiểm tra lịch mỗi phút. Khi thành công, lịch có ID và nút xem bài Facebook.
 - Token hết hạn/thiếu quyền: sửa cấu hình và đặt lại lịch lỗi. Khi trạng thái **Cần đối soát Facebook**, không gửi lại: quản trị viên kiểm tra Page rồi nhập ID `PageID_PostID` để xác minh bài đã có. Nếu chưa tìm thấy bài, giữ lịch để điều tra; không có tự động mở khóa/gửi lại khi kết quả chưa rõ.
-- Backend giữ khóa bài đang gửi, chặn callback/lịch lặp và không tự đăng lại khi mạng mất phản hồi. Thông cáo khủng hoảng vẫn cần người duyệt; chưa nối đăng thông cáo, webhook bình luận, phản hồi hay Insights Facebook.
+- Backend giữ khóa bài đang gửi, chặn callback/lịch lặp và không tự đăng lại khi mạng mất phản hồi. Thông cáo khủng hoảng vẫn cần người duyệt và chỉ hiển thị trong web.
 - Kiểm thử tự động dùng Facebook giả lập; kiểm tra token đọc Page không thay thế nghiệm thu đăng thật. Hướng dẫn chi tiết trên máy: `docs/FACEBOOK_SETUP.md`.
+
+### Bình luận, phản hồi và số liệu Facebook
+
+- Cấp đủ `pages_show_list`, `pages_read_engagement`, `pages_manage_posts`, `pages_read_user_content`, `pages_manage_engagement`, `pages_manage_metadata`, `read_insights`. Trên ứng dụng chưa phát hành, quyền đọc người dùng bên ngoài có thể bị giới hạn bởi chế độ phát triển/App Review.
+- Đồng bộ bình luận cấp đầu của những bài do hệ thống đã xuất bản: khoảng 2 phút/lượt, tối đa 5 bài và 2.000 bình luận/bài/lượt. Feed có nút đồng bộ thủ công và nhãn Facebook/Mô phỏng. Phân trang chưa đầy đủ được báo rõ; không suy luận bình luận bị xóa từ việc thiếu trong kết quả API.
+- Phản hồi Facebook mặc định qua người duyệt hiệu đính, tích xác nhận công khai và bấm **Duyệt và gửi Facebook**. Có thể bật mẫu tự động theo quy tắc ở dưới. Hàng gửi bền vững chạy mỗi 30 giây, kiểm tra lại bình luận gốc trước khi gửi, không tự gửi lại nếu kết quả chưa rõ. ADMIN có thể đối soát bằng ID phản hồi; chỉ phản hồi chắc chắn thất bại mới được thử lại.
+- Feed hiển thị snapshot reactions/comments/shares và Views (`post_media_view`, nếu khả dụng). Worker lấy snapshot khoảng 15 phút; có thể lấy ngay bằng nút trên bài. Chỉ số API không cung cấp là `null`, không biến thành 0. Báo cáo/CSV lưu nguồn bình luận và snapshot gần nhất thu thập trong kỳ; đó là số tích lũy của bài, không phải lượt tăng trong kỳ.
+- Webhook `/api/facebook/webhook` hỗ trợ GET challenge và POST xác minh HMAC SHA256 trên body gốc; feed events được lưu, chống lặp và xử lý bằng worker. Cần URL HTTPS trỏ về backend, cấu hình callback trong Meta App, đăng ký trường `feed` và đăng ký Page với ứng dụng trước khi nhận được sự kiện thật. `FACEBOOK_WEBHOOK_VERIFY_TOKEN` và `FACEBOOK_APP_SECRET` chỉ ở máy chủ. Localhost dùng đồng bộ định kỳ; webhook chưa đăng ký không ảnh hưởng việc nhập bình luận.
+- Đổi token dài hạn: điền `FACEBOOK_APP_ID`, `FACEBOOK_APP_SECRET`, `FACEBOOK_USER_ACCESS_TOKEN` mới cùng cấu hình Page trong `.local/facebook.env`, chạy `node backend/scripts/facebook-token.mjs` từ root. Script kiểm tra 7 quyền, đổi User Token, lấy token đúng Page, xác minh danh tính rồi ghi tệp atomically với quyền 0600; lỗi không thay token hiện có. Chỉ gửi credential tới `graph.facebook.com`, không in giá trị. Hạn User Token hiển thị ở **Cài đặt xử lý → Kết nối Facebook**; token Page vẫn có thể bị thu hồi, không tự gia hạn vô hạn.
+
+### Lời chào tự động: comment và Messenger là hai luồng riêng
+
+- ADMIN mở **Cài đặt xử lý → Kết nối Facebook → Trả lời tự động theo mẫu**, sửa hai mẫu với biến `{name}` và bật từng luồng. Tên thiếu sẽ dùng “bạn”. Việc bật/sửa mẫu cần xác nhận cho phép tự gửi; dữ liệu có từ trước thời điểm bật không bị trả lời ngược lại.
+- **Bình luận:** chỉ trả lời công khai dưới bình luận. Chỉ gửi mẫu khi AI đã phân tích và reviewer AI đều đạt, rủi ro thấp, không nhạy cảm; AI lỗi/khiếu nại vẫn chờ người duyệt. Không chuyển bình luận thành tin nhắn riêng.
+- **Messenger:** chỉ gửi sau khi đọc/xác minh một tin nhắn khách chủ động gửi vào Page, trong cửa sổ 24 giờ. Tối đa một lời chào/người/60 phút; đủ 60 phút rồi khách nhắn tiếp mới được chào lại. Bỏ qua echo của Page; các dấu hiệu nghiêm trọng chuyển trạng thái HUMAN để xem trực tiếp trong hộp thư Page. Đây là lời chào mẫu, chưa phải chatbot tư vấn nhiều lượt. Chế độ chung MANUAL sẽ không gửi tự động.
+- Cần thêm `pages_messaging` vào 7 quyền trước, cập nhật User Token rồi chạy `node backend/scripts/facebook-token.mjs --messenger`. Đọc hộp thư qua API Conversations định kỳ khoảng 2 phút; tối đa 100 hội thoại/lượt, 20 tin gần nhất/hội thoại. Có nút đồng bộ ngay và lịch sử trạng thái gửi trong Settings.
+- Webhook có thể nhận thêm trường `messages` sau khi đăng ký callback HTTPS và Page với ứng dụng. Raw body phải có HMAC đúng; echo/ngoài Page bị bỏ qua. Localhost dùng polling nên không phản hồi tức thì.
+- Hàng gửi Messenger lưu ID tin đến và ID gửi; timeout/DB mất sau khi Meta nhận tin chuyển UNCERTAIN, không tự gửi lại. Tắt hoặc đổi mẫu hủy hàng gửi tự động cũ chưa thực hiện. Kiểm tra trực tiếp hộp thư Page khi chưa rõ kết quả; UI không khẳng định đã gửi khi chỉ mới xếp hàng.
 
 ## Máy hiện tại
 - Web: http://localhost:3000
