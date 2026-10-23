@@ -6,7 +6,7 @@ import prisma from "../src/prisma.js";
 import { app } from "../src/app.js";
 import { tokenHash } from "../src/lib/security.js";
 import { createFacebookClient, FacebookError } from "../src/services/facebook.js";
-import { syncFacebookComments, commentHash, approveFacebookReply, sendFacebookReply, recoverFacebookReplies, validFacebookSignature, acceptFacebookWebhook, processFacebookEvents, collectFacebookMetrics } from "../src/services/facebookCommunity.js";
+import { discoverFacebookPosts, syncFacebookComments, commentHash, approveFacebookReply, sendFacebookReply, recoverFacebookReplies, validFacebookSignature, acceptFacebookWebhook, processFacebookEvents, collectFacebookMetrics } from "../src/services/facebookCommunity.js";
 
 test("Facebook comments pagination ignores external next URLs; metrics retain unknown values", async () => {
   const urls = [];
@@ -124,4 +124,35 @@ test("Facebook community preserves human approval, deduplicates sync/send, block
     await prisma.user.deleteMany({ where: { id: { in: users } } });
     await prisma.$disconnect();
   }
+});
+
+
+test("Page discovery imports native posts once and rejects other Pages", async () => {
+  const schedules = new Map(), posts = [];
+  const tx = {
+    $queryRaw: async () => [],
+    postSchedule: { findUnique: async ({where}) => schedules.get(where.externalPostId), create: async ({data}) => schedules.set(data.externalPostId, data) },
+    post: { create: async ({data}) => { const p = {id: String(posts.length), ...data}; posts.push(p); return p; } },
+  };
+  const db = {$transaction: async fn => fn(tx)};
+  const client = {pageId: "123", identity: async () => ({}), publishedPosts: async () => ({complete: true, posts: [
+    {id: "123_99", from: {id: "123"}, created_time: "2026-10-22T12:00:00Z", message: "Bài trực tiếp"},
+    {id: "123_100", from: {id: "123"}, created_time: "2026-10-22T12:00:00Z"},
+    {id: "456_99", from: {id: "456"}, created_time: "2026-10-22T12:00:00Z"},
+  ]})};
+  await discoverFacebookPosts(db, client); await discoverFacebookPosts(db, client);
+  assert.equal(posts.length, 2);
+  assert.equal(posts[0].status, "PUBLISHED");
+  assert.equal(schedules.get("123_99").status, "PUBLISHED");
+});
+
+test("Page post pagination uses trusted Graph paths", async () => {
+  const urls = [];
+  const client = createFacebookClient({pageId: "123", token: "secret", version: "v26.0"}, async url => {
+    urls.push(url);
+    return new Response(JSON.stringify(url.includes("after=") ? {data: [{id: "123_2"}]} : {data: [{id: "123_1"}], paging: {next: "https://evil.invalid", cursors: {after: "a&b"}}}));
+  });
+  assert.equal((await client.publishedPosts()).posts.length, 2);
+  assert.ok(urls.every(url => url.startsWith("https://graph.facebook.com/v26.0/123/published_posts?") && !url.includes("secret")));
+  assert.ok(urls[1].includes("after=a%26b"));
 });

@@ -8,6 +8,24 @@ import { queueAutomaticComments, ingestInboxMessage, pollFacebookInbox, sendInbo
 export const commentHash = value => createHash("sha256").update(value).digest("hex");
 const safeError = e => e instanceof FacebookError || e instanceof HttpError ? e.message : "Không hoàn tất đồng bộ Facebook.";
 const lock = (db, id) => db.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${id}))::text`;
+// Import existing Page publications for monitoring only; never schedule or republish them.
+export async function discoverFacebookPosts(db, client = createFacebookClient()) {
+  await client.identity();
+  const result = await client.publishedPosts();
+  for (const remote of result.posts) {
+    if (!new RegExp(`^${client.pageId}_\\d+$`).test(remote.id) || remote.from?.id !== client.pageId || !Number.isFinite(Date.parse(remote.created_time))) continue;
+    await db.$transaction(async tx => {
+      await lock(tx, `facebook-post:${remote.id}`);
+      if (await tx.postSchedule.findUnique({ where: { externalPostId: remote.id } })) return;
+      const content = typeof remote.message === "string" ? remote.message : "";
+      const publishedAt = new Date(remote.created_time);
+      const post = await tx.post.create({ data: { topic: "Bài Facebook đồng bộ từ Page", headline: content.split("\n")[0].slice(0, 200) || "Bài trên Page Hiên Cà Phê", content, status: "PUBLISHED", publishedAt } });
+      await tx.postSchedule.create({ data: { postId: post.id, target: "FACEBOOK", pageId: client.pageId, externalPostId: remote.id, permalink: `https://www.facebook.com/${remote.id}`, status: "PUBLISHED", publishedAt, scheduledAt: publishedAt, contentHash: commentHash(content) } });
+    });
+  }
+  return { fetched: result.posts.length, complete: result.complete };
+}
+
 export async function syncFacebookComments(db, scheduleId, { client = createFacebookClient(), dispatchJob = dispatch, crisis = evaluateCrisis } = {}) {
   const startedAt = new Date();
   const s = await db.postSchedule.findUnique({ where: { id: scheduleId } });
@@ -156,7 +174,11 @@ export async function processFacebookEvents(db, options = {}) {
         await db.facebookEvent.update({ where: { id: e.id }, data: { status: "DONE", error: null } });
         continue;
       }
-      const s = await db.postSchedule.findUnique({ where: { externalPostId: e.payload.postId } });
+      let s = await db.postSchedule.findUnique({ where: { externalPostId: e.payload.postId } });
+      if (!s) {
+        await discoverFacebookPosts(db, options.client || createFacebookClient());
+        s = await db.postSchedule.findUnique({ where: { externalPostId: e.payload.postId } });
+      }
       if (s?.pageId === e.pageId && s.status === "PUBLISHED") {
         if (e.payload.verb === "remove") {
           await db.$transaction(async tx => {
@@ -193,6 +215,10 @@ export function startFacebookWorker(db) {
       for (const r of inbox) { if (stopped) break; await sendInboxReply(db, r.id); }
       if (ticks++ % 4 === 0 && !stopped) {
         try { await pollFacebookInbox(db); } catch { /* Sanitized error is visible in automation settings. */ }
+        try {
+          const discovery = await discoverFacebookPosts(db);
+          if (!discovery.complete) console.error("Facebook: danh sách bài Page chưa đầy đủ; cần đồng bộ tiếp.");
+        } catch (e) { console.error("Facebook discovery:", safeError(e)); }
         const schedules = await db.postSchedule.findMany({ where: { target: "FACEBOOK", status: "PUBLISHED", OR: [{ commentsSyncedAt: null }, { commentsSyncedAt: { lt: new Date(Date.now() - 120000) } }] }, include: { metricSnapshots: { orderBy: { capturedAt: "desc" }, take: 1 } }, take: 5, orderBy: { commentsSyncedAt: { sort: "asc", nulls: "first" } } });
         for (const s of schedules) {
           if (stopped) break;
