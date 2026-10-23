@@ -19,7 +19,7 @@ export function FacebookPostControls({ post, refresh }: { post: Post; refresh: (
   }
   return <section className="notice info mt">
     <strong>Facebook Page</strong>{s.permalink && <> · <a href={s.permalink} target="_blank" rel="noreferrer">Xem bài trên Facebook</a></>}
-    <p className="hint">Bình luận trực tiếp được đồng bộ khoảng 2 phút/lượt. Lần cuối: {s.commentsSyncedAt ? dateTime(s.commentsSyncedAt) : "Chưa đồng bộ"}.</p>
+    <p className="hint">Bình luận trực tiếp được đồng bộ định kỳ khoảng 15 giây/lượt (có thể lâu hơn khi nhiều bài). Lần cuối: {s.commentsSyncedAt ? dateTime(s.commentsSyncedAt) : "Chưa đồng bộ"}.</p>
     <Notice error={error || s.commentSyncError || ""} />
     {snapshot && <div className="mt">
       <p>Reactions: <strong>{snapshot.metrics.reactions ?? "Chưa có dữ liệu"}</strong> · Bình luận: <strong>{snapshot.metrics.comments ?? "Chưa có dữ liệu"}</strong> · Chia sẻ: <strong>{snapshot.metrics.shares ?? "Chưa có dữ liệu"}</strong> · Views: <strong>{snapshot.metrics.views ?? "Chưa có dữ liệu"}</strong></p>
@@ -107,7 +107,7 @@ export function FacebookAutomationSettings() {
       <fieldset disabled={busy}>
         <label className="mt"><input type="checkbox" name="commentEnabled" defaultChecked={data?.commentEnabled || false} /> Tự trả lời bình luận Facebook</label>
         <div className="field mt"><label htmlFor="facebook-comment-template">Mẫu dưới bình luận</label><textarea id="facebook-comment-template" name="commentTemplate" defaultValue={data?.commentTemplate || "Chào {name}! Hiên Cà Phê có thể giúp gì cho bạn?"} required maxLength={800} rows={2} /></div>
-        <p className="hint">Chỉ gửi khi phân tích và kiểm tra AI đều đạt, bình luận rủi ro thấp, không nhạy cảm. AI lỗi và khiếu nại chuyển người duyệt.</p>
+        <p className="hint">Gửi mẫu cố định sau khi nhận bình luận, không chờ phân tích hay kiểm tra AI. Phân tích rủi ro chạy riêng.</p>
         <label className="mt"><input type="checkbox" name="messengerEnabled" defaultChecked={data?.messengerEnabled || false} /> Tự chào khi khách nhắn Messenger</label>
         <div className="field mt"><label htmlFor="facebook-messenger-template">Mẫu Messenger</label><textarea id="facebook-messenger-template" name="messengerTemplate" defaultValue={data?.messengerTemplate || "Chào {name}! Hiên Cà Phê có thể giúp gì cho bạn? Bạn cứ gửi câu hỏi tại đây nhé."} required maxLength={800} rows={2} /></div>
         <p className="hint">Biến {"{name}"} được thay bằng tên Facebook khi API cung cấp; nếu thiếu tên sẽ dùng “bạn”. Messenger cần quyền pages_messaging.</p>
