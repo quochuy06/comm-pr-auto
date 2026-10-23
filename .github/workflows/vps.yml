@@ -1,0 +1,108 @@
+name: Test and deploy VPS
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: comm-pr-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci-test-only
+          POSTGRES_DB: comm_pr_ci
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d comm_pr_ci"
+          --health-interval 5s --health-timeout 3s --health-retries 30
+    env:
+      DATABASE_URL: postgresql://postgres:ci-test-only@127.0.0.1:5432/comm_pr_ci
+      N8N_CALLBACK_SECRET: ci-only-callback-secret-not-a-production-credential
+      N8N_BASE_URL: http://127.0.0.1:9
+      RUN_DB_TESTS: 'true'
+      COOKIE_SECURE: 'false'
+      NEXT_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+      - name: Backend dependencies and isolated database
+        working-directory: backend
+        run: |
+          npm ci
+          npm run db:generate
+          npm run db:migrate
+          node --input-type=module -e 'import p from "./src/prisma.js"; await p.settings.upsert({where:{id:"default"},create:{id:"default"},update:{}}); await p.$disconnect();'
+      - name: Backend API and database tests
+        working-directory: backend
+        run: node --test --test-concurrency=1 test/*.test.js
+      - name: Deployment safety tests
+        run: python3 -m unittest deploy/test_vps.py deploy/test_cd.py
+      - name: Frontend lint and production build
+        working-directory: frontend
+        env:
+          BACKEND_URL: http://backend:5000
+        run: |
+          npm ci
+          npm run lint
+          npm run build -- --webpack
+
+  deploy:
+    needs: verify
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    environment: production
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Build release images without production credentials
+        run: |
+          set -euo pipefail
+          docker build --label "org.opencontainers.image.revision=$GITHUB_SHA" -f deploy/backend.Dockerfile -t "comm-pr-backend:$GITHUB_SHA" .
+          docker build --label "org.opencontainers.image.revision=$GITHUB_SHA" -f deploy/frontend.Dockerfile -t "comm-pr-frontend:$GITHUB_SHA" .
+          mkdir -p "$RUNNER_TEMP/commpr-release"
+          python3 deploy/release_manifest.py --sha "$GITHUB_SHA" --output "$RUNNER_TEMP/commpr-release/manifest.json"
+          docker save "comm-pr-backend:$GITHUB_SHA" "comm-pr-frontend:$GITHUB_SHA" -o "$RUNNER_TEMP/commpr-release/images.tar"
+          tar -C "$RUNNER_TEMP/commpr-release" -czf "$RUNNER_TEMP/commpr-release.tar.gz" images.tar manifest.json
+      - name: Upload and deploy through restricted SSH
+        env:
+          VPS_HOST: ${{ vars.VPS_HOST || '160.250.180.238' }}
+          VPS_PORT: ${{ vars.VPS_PORT || '22' }}
+          VPS_DEPLOY_KEY: ${{ secrets.VPS_DEPLOY_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          test -n "$VPS_DEPLOY_KEY" || { echo 'Configure VPS_DEPLOY_KEY first'; exit 1; }
+          test -n "$VPS_KNOWN_HOSTS" || { echo 'Configure VPS_KNOWN_HOSTS first'; exit 1; }
+          ssh_dir="$RUNNER_TEMP/commpr-ssh"
+          mkdir -m 700 "$ssh_dir"
+          trap 'rm -rf "$ssh_dir"' EXIT
+          printf '%s\n' "$VPS_DEPLOY_KEY" > "$ssh_dir/key"
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > "$ssh_dir/known_hosts"
+          chmod 600 "$ssh_dir/key" "$ssh_dir/known_hosts"
+          options=(-i "$ssh_dir/key" -p "$VPS_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$ssh_dir/known_hosts" -o ServerAliveInterval=15 -o ServerAliveCountMax=20)
+          ssh "${options[@]}" "commpr-deploy@$VPS_HOST" "upload $GITHUB_SHA" < "$RUNNER_TEMP/commpr-release.tar.gz"
+          ssh "${options[@]}" "commpr-deploy@$VPS_HOST" "deploy $GITHUB_SHA"

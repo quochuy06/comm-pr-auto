@@ -37,3 +37,4 @@ __pycache__/
 
 # Keep the final-term planning document local
 /KE_HOACH_CUOI_KY.md
+/deploy/runtime/

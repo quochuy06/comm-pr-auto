@@ -1,5 +1,7 @@
 # Chuẩn bị chuyển lên VPS — 23/10/2026
 
+**Bộ cấu hình hoàn chỉnh và các bước chạy hiện tại:** [VPS_RUNBOOK.md](VPS_RUNBOOK.md). Dùng hướng dẫn này khi khôi phục/kích hoạt; các ghi chú dưới đây mô tả gói snapshot ban đầu.
+
 VPS: `160.250.180.238`, Ubuntu 24.04 amd64, Docker đã kiểm tra bằng hello-world.
 Chưa có tên miền. Chuẩn bị và tải gói lên trước, chưa kích hoạt bản sao nghiệp vụ.
 

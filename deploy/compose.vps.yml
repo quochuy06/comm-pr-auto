@@ -1,0 +1,84 @@
+name: ${COMPOSE_PROJECT_NAME:?Use the generated private runtime configuration}
+x-log: &logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: "3"
+services:
+  postgres:
+    image: ${POSTGRES_IMAGE:?Restore manifest must pin the PostgreSQL image}
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: commpr
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Missing private runtime secret}
+      POSTGRES_DB: comm_pr_db
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U commpr -d comm_pr_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 40
+    logging: *logging
+    mem_limit: 768m
+  backend:
+    image: ${COMPOSE_PROJECT_NAME}-backend:local
+    build:
+      context: ..
+      dockerfile: deploy/backend.Dockerfile
+    restart: unless-stopped
+    env_file:
+      - path: ./runtime/backend.env
+        format: raw
+    environment:
+      BACKGROUND_JOBS_ENABLED: ${BACKGROUND_JOBS_ENABLED:-false}
+    volumes:
+      - ../backend/storage:/app/backend/storage
+      - ../.local/facebook.env:/app/.local/facebook.env:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:5000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    logging: *logging
+    mem_limit: 768m
+  frontend:
+    image: ${COMPOSE_PROJECT_NAME}-frontend:local
+    build:
+      context: ..
+      dockerfile: deploy/frontend.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    logging: *logging
+    mem_limit: 512m
+  web:
+    image: nginx:stable-alpine@sha256:47928bf67eb62a1863cb08d9ecb52d3e704304ba614eaee17884204677702951
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${WEB_PORT:-8080}:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - frontend
+    logging: *logging
+    mem_limit: 128m
+  n8n:
+    profiles: [automation]
+    image: ${N8N_IMAGE:?Restore manifest must pin the original n8n image}
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${N8N_EDITOR_PORT:-5678}:5678"
+    env_file:
+      - path: ./runtime/n8n.env
+        format: raw
+    volumes:
+      - ./runtime/n8n-data:/home/node/.n8n
+    logging: *logging
+    mem_limit: 1280m
+volumes:
+  pgdata:

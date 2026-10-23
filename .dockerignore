@@ -1,0 +1,13 @@
+.git
+.local
+**/node_modules
+**/.next
+**/.env
+**/.env.*
+**/storage
+**/__pycache__
+**/*.log
+**/*.tsbuildinfo
+KE_HOACH_CUOI_KY.md
+docs
+deploy/runtime
