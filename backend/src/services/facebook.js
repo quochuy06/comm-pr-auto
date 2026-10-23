@@ -73,6 +73,18 @@ export function createFacebookClient(config = facebookConfig(), fetchImpl = fetc
       if (typeof data.message_id !== "string" || !data.message_id || data.recipient_id !== senderId) throw new FacebookError("Chưa xác định kết quả gửi Messenger.", true);
       return data.message_id;
     },
+    async publishedPosts() {
+      const posts = []; let after;
+      for (let i = 0; i < 100; i++) {
+        const data = await request(`${config.pageId}/published_posts?fields=id,from,message,created_time,permalink_url&limit=100${after ? `&after=${encodeURIComponent(after)}` : ""}`);
+        if (!Array.isArray(data.data)) throw new FacebookError("Chưa đọc được danh sách bài trên Page.");
+        posts.push(...data.data);
+        if (!data.paging?.next) return { posts, complete: true };
+        after = data.paging?.cursors?.after;
+        if (!after) break;
+      }
+      return { posts, complete: false };
+    },
     async comments(postId) {
       facebookLink(postId, config.pageId);
       const comments = []; let after;

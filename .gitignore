@@ -34,3 +34,6 @@ AGENTS.md
 # Python installer cache
 __pycache__/
 *.py[cod]
+
+# Keep the final-term planning document local
+/KE_HOACH_CUOI_KY.md
