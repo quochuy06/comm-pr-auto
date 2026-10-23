@@ -85,3 +85,13 @@ Phúc phụ trách cấu hình/điều kiện tự trả lời comment và lời
 - Nhánh đầy đủ: `feat/facebook-community-insights`. Các nhánh thành viên được xếp nối tiếp, giữ nguyên tác giả của commit nền; dùng nhánh đầy đủ để chạy demo. Main chưa được cập nhật trong đợt push này.
 - Schema/migrations/API nền dùng chung nằm trong commit Community của Phúc; ghi đồng tác giả Bảo cho phần số liệu và Huy cho worker/lifecycle, thay vì gán phần dùng chung cho một người. Các tệp UI/types/controller dùng chung được stage theo delta của từng chủ sở hữu.
 - 35/35 backend/API/DB tests đạt, gồm mốc Messenger 59:59.999 và đúng60phút; lint/TypeScript đạt. Production build Webpack và browser desktop/mobile đã nghiệm thu trên cùng source; không gửi Meta thật trong bộ test. Token, backup và media vẫn ở tệp riêng bị Git ignore.
+
+## Phản hồi mẫu không chờ AI — 23/10/2026
+
+Theo yêu cầu mới: lời chào cố định cho comment và Messenger không phụ thuộc kết quả AI; phân tích rủi ro chạy riêng, thông cáo khủng hoảng vẫn cần người duyệt. Giữ xác minh nguồn, chống gửi trùng, đối soát UNCERTAIN và cooldown Messenger 60 phút.
+
+- Phúc — `codex/phuc-template-replies`: chính sách mẫu comment/Messenger và kiểm thử AI chưa chạy/lỗi.
+- Huy — `codex/huy-webhook-reply-latency`: webhook đánh thức worker sau lưu sự kiện, hàng gửi mỗi giây, polling dự phòng khoảng 15 giây; tài liệu vận hành.
+- Bảo — `codex/bao-template-reply-ui`: giao diện giải thích đúng việc gửi mẫu không chờ AI và chu kỳ đồng bộ mới.
+
+Các nhánh xếp nối tiếp Phúc → Huy → Bảo để giữ phụ thuộc; bản đầy đủ được tích hợp vào main theo yêu cầu. Không đổi schema/migration, token hoặc workflow n8n. Thời gian thực tế còn phụ thuộc Meta, lượng dữ liệu và thời gian gọi API; không cam kết gửi tức thì tuyệt đối.

@@ -3,7 +3,7 @@ import prisma from "../prisma.js";
 import { roles } from "../middleware/auth.js";
 import { HttpError, audit, text } from "../lib/errors.js";
 import { createFacebookClient, facebookConfig, FacebookError } from "../services/facebook.js";
-import { syncFacebookComments, collectFacebookMetrics, acceptFacebookWebhook } from "../services/facebookCommunity.js";
+import { syncFacebookComments, collectFacebookMetrics, acceptFacebookWebhook, wakeFacebookWorker } from "../services/facebookCommunity.js";
 import { updateAutomation, pollFacebookInbox } from "../services/facebookAutomation.js";
 
 export async function facebookWebhook(req, res) {
@@ -14,6 +14,7 @@ export async function facebookWebhook(req, res) {
   }
   await acceptFacebookWebhook(prisma, req.body, req.get("x-hub-signature-256"), config);
   res.json({ success: true });
+  if (process.env.BACKGROUND_JOBS_ENABLED !== "false") wakeFacebookWorker();
 }
 const router = Router();
 const safe = fn => async (req, res) => {

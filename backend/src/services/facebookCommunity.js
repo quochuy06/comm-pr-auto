@@ -199,8 +199,18 @@ export async function processFacebookEvents(db, options = {}) {
   }
 }
 
+let wakeWorker = () => {};
+export function wakeFacebookWorker() { wakeWorker(); }
+
 export function startFacebookWorker(db) {
-  let stopped = false, running = false, ticks = 0;
+  let stopped = false, running = false, nextPollAt = 0, nextDiscoveryAt = 0;
+  const sendPending = async () => {
+    await queueAutomaticComments(db);
+    const replies = await db.facebookReply.findMany({ where: { status: "PENDING" }, take: 20, orderBy: { createdAt: "asc" } });
+    for (const r of replies) { if (stopped) break; await sendFacebookReply(db, r.id); }
+    const inbox = await db.facebookInboxReply.findMany({ where: { status: "PENDING" }, take: 20, orderBy: { createdAt: "asc" } });
+    for (const r of inbox) { if (stopped) break; await sendInboxReply(db, r.id); }
+  };
   const tick = async () => {
     if (stopped || running) return;
     running = true;
@@ -208,21 +218,22 @@ export function startFacebookWorker(db) {
       await recoverFacebookReplies(db);
       await recoverInboxReplies(db);
       await processFacebookEvents(db);
-      await queueAutomaticComments(db);
-      const pending = await db.facebookReply.findMany({ where: { status: "PENDING" }, take: 10, orderBy: { createdAt: "asc" } });
-      for (const r of pending) { if (stopped) break; await sendFacebookReply(db, r.id); }
-      const inbox = await db.facebookInboxReply.findMany({ where: { status: "PENDING" }, take: 10, orderBy: { createdAt: "asc" } });
-      for (const r of inbox) { if (stopped) break; await sendInboxReply(db, r.id); }
-      if (ticks++ % 4 === 0 && !stopped) {
-        try { await pollFacebookInbox(db); } catch { /* Sanitized error is visible in automation settings. */ }
-        try {
-          const discovery = await discoverFacebookPosts(db);
-          if (!discovery.complete) console.error("Facebook: danh sách bài Page chưa đầy đủ; cần đồng bộ tiếp.");
-        } catch (e) { console.error("Facebook discovery:", safeError(e)); }
-        const schedules = await db.postSchedule.findMany({ where: { target: "FACEBOOK", status: "PUBLISHED", OR: [{ commentsSyncedAt: null }, { commentsSyncedAt: { lt: new Date(Date.now() - 120000) } }] }, include: { metricSnapshots: { orderBy: { capturedAt: "desc" }, take: 1 } }, take: 5, orderBy: { commentsSyncedAt: { sort: "asc", nulls: "first" } } });
+      await sendPending();
+      if (Date.now() >= nextPollAt && !stopped) {
+        nextPollAt = Date.now() + 15000;
+        try { await pollFacebookInbox(db); } catch { /* Error is visible in settings. */ }
+        await sendPending();
+        if (Date.now() >= nextDiscoveryAt) {
+          nextDiscoveryAt = Date.now() + 120000;
+          try {
+            const discovery = await discoverFacebookPosts(db);
+            if (!discovery.complete) console.error("Facebook: danh sách bài Page chưa đầy đủ; cần đồng bộ tiếp.");
+          } catch (e) { console.error("Facebook discovery:", safeError(e)); }
+        }
+        const schedules = await db.postSchedule.findMany({ where: { target: "FACEBOOK", status: "PUBLISHED", OR: [{ commentsSyncedAt: null }, { commentsSyncedAt: { lt: new Date(Date.now() - 15000) } }] }, include: { metricSnapshots: { orderBy: { capturedAt: "desc" }, take: 1 } }, take: 5, orderBy: { commentsSyncedAt: { sort: "asc", nulls: "first" } } });
         for (const s of schedules) {
           if (stopped) break;
-          try { await syncFacebookComments(db, s.id); } catch { /* Sanitized error is stored on the schedule. */ }
+          try { await syncFacebookComments(db, s.id); await sendPending(); } catch { /* Sanitized error is stored on the schedule. */ }
           if (!s.metricSnapshots[0] || Date.now() - s.metricSnapshots[0].capturedAt > 900000) {
             try { await collectFacebookMetrics(db, s.id); } catch { /* Keep the previous timestamp visible rather than inventing a new snapshot. */ }
           }
@@ -231,7 +242,8 @@ export function startFacebookWorker(db) {
     } catch (e) { console.error("Facebook worker:", e.code || e.name); }
     finally { running = false; }
   };
-  const timer = setInterval(tick, 30000); timer.unref();
+  const timer = setInterval(tick, 1000); timer.unref();
+  wakeWorker = () => { void tick(); };
   void tick();
-  return () => { stopped = true; clearInterval(timer); };
+  return () => { stopped = true; clearInterval(timer); wakeWorker = () => {}; };
 }
