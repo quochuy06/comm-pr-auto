@@ -23,7 +23,7 @@ test("Templates substitute names safely; Messenger uses only inbound recipient I
   await assert.rejects(client.sendMessage("bad/id", "test"));
 });
 
-test("Automatic comment and inbound-only Messenger enforce activation, human gates, cooldown and durable sends", { skip: process.env.RUN_DB_TESTS !== "true" }, async () => {
+test("Automatic comment and inbound-only Messenger enforce activation, AI-independent templates, cooldown and durable sends", { skip: process.env.RUN_DB_TESTS !== "true" }, async () => {
   const oldRule = await prisma.facebookAutomation.findUnique({ where: { id: "default" } });
   const oldSettings = await prisma.settings.findUnique({ where: { id: "default" } });
   const commentIds = [], inboundIds = [], eventKeys = [], postId = randomUUID();
@@ -42,13 +42,13 @@ test("Automatic comment and inbound-only Messenger enforce activation, human gat
     const rule = await updateAutomation(prisma, body, "fixture", client);
     await prisma.facebookAutomation.update({ where: { id: "default" }, data: { commentEnabledAt: baseline, messengerEnabledAt: baseline } });
     await prisma.post.create({ data: { id: postId, topic: "automation-fixture", status: "PUBLISHED", schedule: { create: { target: "FACEBOOK", pageId: "123", externalPostId: `123_${sequence}`, status: "PUBLISHED", contentHash: "fixture", scheduledAt: baseline } } } });
-    const variants = [{}, { createdAt: new Date(+baseline - 1000) }, { risk: "HIGH" }, { autoReplyEligible: false }, { sensitive: true }, { analysisStatus: "FAILED" }];
+    const variants = [{}, { createdAt: new Date(+baseline - 1000) }, { risk: "HIGH" }, { autoReplyEligible: false }, { sensitive: true }, { analysisStatus: "FAILED" }, { analysisStatus: "PENDING", replyStatus: "NONE" }, { text: "Tôi bị ngộ độc" }];
     for (const variant of variants) {
       const c = await prisma.comment.create({ data: { postId, source: "FACEBOOK", pageId: "123", externalId: `123_${++sequence}`, sourceHash: "hash", author: "Huy", text: "Xin chào", analysisStatus: "DONE", replyStatus: "PENDING", sentiment: "NEUTRAL", risk: "LOW", autoReplyEligible: true, ...variant } }); commentIds.push(c.id);
     }
     await Promise.all([queueAutomaticComments(prisma), queueAutomaticComments(prisma)]);
     const replies = await prisma.facebookReply.findMany({ where: { commentId: { in: commentIds } } });
-    assert.equal(replies.length, 1); assert.equal(replies[0].text, "Chào Huy! Hiên có thể giúp gì cho bạn?");
+    assert.equal(replies.length, 7); assert.equal(replies[0].text, "Chào Huy! Hiên có thể giúp gì cho bạn?");
     assert.ok(replies[0].automatic);
     assert.equal(await prisma.facebookInboxReply.count({ where: { pageId: "123" } }), 0, "comments never enqueue Messenger");
     await updateAutomation(prisma, { ...body, commentEnabled: false, messengerEnabled: false }, "fixture", client);
@@ -76,7 +76,7 @@ test("Automatic comment and inbound-only Messenger enforce activation, human gat
     const hourLater = new Date(+sentRow.attemptedAt + 60 * 60000);
     const allowed = await ingest(makeMessage({ from: m.from, created_time: hourLater.toISOString() }), hourLater);
     assert.equal(allowed.status, "PENDING", "a new incoming message at 60 minutes can receive a new greeting");
-    const human = await ingest(makeMessage({ message: "Tôi bị ngộ độc" })); assert.equal(human.status, "HUMAN");
+    const human = await ingest(makeMessage({ message: "Tôi bị ngộ độc" })); assert.equal(human.status, "PENDING");
     const forged = makeMessage(), forgedRow = await ingest(forged);
     assert.equal((await sendInboxReply(prisma, forgedRow.id, { clientFactory: () => ({ ...fake, incomingMessage: async () => ({ ...forged, from: { id: "999" } }) }) })).status, "FAILED");
     assert.equal(inboxSends, 1, "re-read recipient mismatch cannot send");

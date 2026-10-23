@@ -1,5 +1,4 @@
 import { HttpError, text, audit } from "../lib/errors.js";
-import { severePattern } from "./policy.js";
 import { createFacebookClient, FacebookError } from "./facebook.js";
 
 const lock = (db, id) => db.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${id}))::text`;
@@ -38,13 +37,13 @@ export async function updateAutomation(db, body, actor, client = createFacebookC
 export async function queueAutomaticComments(db) {
   const rule = await db.facebookAutomation.findUnique({ where: { id: "default" } });
   if (!rule?.commentEnabled || !rule.commentEnabledAt) return;
-  const candidates = await db.comment.findMany({ where: { source: "FACEBOOK", pageId: rule.pageId, createdAt: { gte: rule.commentEnabledAt }, replyStatus: "PENDING", analysisStatus: "DONE", autoReplyEligible: true, remoteDeleted: false, facebookReply: null }, take: 20, orderBy: { createdAt: "asc" } });
+  const candidates = await db.comment.findMany({ where: { source: "FACEBOOK", pageId: rule.pageId, createdAt: { gte: rule.commentEnabledAt }, replyStatus: { in: ["NONE", "PENDING"] }, remoteDeleted: false, facebookReply: null }, take: 20, orderBy: { createdAt: "asc" } });
   for (const c of candidates) await db.$transaction(async tx => {
     await lock(tx, c.externalId);
     const r = await tx.facebookAutomation.findUnique({ where: { id: "default" } });
     const settings = await tx.settings.findUnique({ where: { id: "default" } });
     const current = await tx.comment.findUnique({ where: { id: c.id }, include: { facebookReply: true } });
-    if (!r?.commentEnabled || !sameVersion(r.version, rule.version) || settings?.mode !== "CONDITIONAL" || !current || current.remoteDeleted || current.facebookReply || current.replyStatus !== "PENDING" || current.analysisStatus !== "DONE" || !current.autoReplyEligible || current.risk !== "LOW" || current.sensitive || !["POSITIVE", "NEUTRAL"].includes(current.sentiment) || severePattern.test(current.text)) return;
+    if (!r?.commentEnabled || !sameVersion(r.version, rule.version) || settings?.mode !== "CONDITIONAL" || !current || current.remoteDeleted || current.facebookReply || !["NONE", "PENDING"].includes(current.replyStatus)) return;
     const replyText = greeting(r.commentTemplate, current.author);
     await tx.facebookReply.create({ data: { commentId: c.id, pageId: r.pageId, sourceHash: current.sourceHash, text: replyText, automatic: true, automationVersion: r.version } });
     await tx.comment.update({ where: { id: c.id }, data: { replyText, replyStatus: "APPROVED" } });
@@ -64,9 +63,8 @@ export async function ingestInboxMessage(db, message, pageId, now = new Date()) 
     if (await tx.facebookInboxReply.findUnique({ where: { inboundId: message.id } })) return null;
     const prior = await tx.facebookInboxReply.findFirst({ where: { pageId, senderId: message.from.id, status: { in: ["PENDING", "SENDING", "SENT", "UNCERTAIN"] }, OR: [{ createdAt: { gt: new Date(+now - greetingCooldownMs) } }, { attemptedAt: { gt: new Date(+now - greetingCooldownMs) } }] } });
     const incomingText = String(message.message || "").slice(0, 10000), senderName = String(message.from.name || "bạn").slice(0, 100);
-    const human = severePattern.test(incomingText) || /(khiếu nại|lừa đảo|bồi thường|đau bụng|dị ứng)/iu.test(incomingText);
     return tx.facebookInboxReply.create({ data: { inboundId: message.id, pageId, senderId: message.from.id, senderName, incomingText, incomingAt, replyText: greeting(rule.messengerTemplate, senderName), automationVersion: rule.version,
-      status: human ? "HUMAN" : prior ? "SKIPPED" : "PENDING", error: human ? "Nội dung cần người phụ trách xem trực tiếp trong Messenger." : prior ? "Đã có lời chào trong 60 phút; không gửi lặp." : null } });
+      status: prior ? "SKIPPED" : "PENDING", error: prior ? "Đã có lời chào trong 60 phút; không gửi lặp." : null } });
   });
 }
 
@@ -108,7 +106,6 @@ export async function sendInboxReply(db, id, { clientFactory = createFacebookCli
     const created = Date.parse(remote.created_time);
     if (remote.id !== queued.inboundId || remote.from?.id !== queued.senderId || !remote.to?.data?.some(p => p.id === queued.pageId) || !Number.isFinite(created) || Date.now() - created >= 86400000 || created > Date.now() + 60000)
       throw new FacebookError("Chưa xác nhận được tin nhắn chủ động từ người nhận trong 24 giờ.");
-    if (severePattern.test(remote.message || "") || /(khiếu nại|lừa đảo|bồi thường|đau bụng|dị ứng)/iu.test(remote.message || "")) throw new FacebookError("Nội dung cần người phụ trách trả lời trực tiếp trong Messenger.");
     sending = true;
     externalId = await client.sendMessage(queued.senderId, queued.replyText);
   } catch (e) {
