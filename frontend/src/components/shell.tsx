@@ -17,6 +17,7 @@ import { api, send } from "@/lib/api";
 import type { User } from "@/lib/types";
 const AuthContext = createContext<User | null>(null);
 export const useAuth = () => useContext(AuthContext);
+const publicPaths = new Set(["/login", "/privacy", "/terms", "/data-deletion"]);
 const links = [
   { href: "/", label: "Tổng quan", icon: LayoutDashboard },
   { href: "/campaigns", label: "Chiến dịch", icon: FolderOpen },
@@ -34,7 +35,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [authError, setAuthError] = useState("");
   useEffect(() => {
-    if (pathname === "/login") return;
+    if (publicPaths.has(pathname)) return;
     let active = true;
     api<User>("/auth/me")
       .then((u) => {
@@ -61,7 +62,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
     window.addEventListener("comm:unauthorized", expired);
     return () => window.removeEventListener("comm:unauthorized", expired);
   }, [router]);
-  if (pathname === "/login") return children;
+  if (publicPaths.has(pathname)) return children;
   if (!user)
     return <div className="center-screen">Đang kiểm tra phiên đăng nhập…</div>;
   return (
