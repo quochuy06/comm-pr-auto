@@ -4,6 +4,7 @@ import cors from "cors";
 import prisma from "./prisma.js";
 import authRoutes from "./routes/authRoutes.js";
 import coreRoutes from "./routes/coreRoutes.js";
+import knowledgeRoutes from "./routes/knowledgeRoutes.js";
 import postRoutes from "./routes/postRoutes.js";
 import approvalRoutes from "./routes/approvalRoutes.js";
 import communityRoutes from "./routes/communityRoutes.js";
@@ -51,6 +52,7 @@ app.post("/api/webhooks/content-text", internalOnly, handleTextCallback);
 app.use("/api/workflow-internal", internalOnly, expansionInternal);
 app.post("/api/webhooks/:kind", internalOnly, handleN8nCallback);
 app.use("/api", authenticate);
+app.use("/api/knowledge", knowledgeRoutes);
 app.use("/api", coreRoutes, approvalRoutes, communityRoutes, expansionRoutes, insightRoutes, facebookRoutes);
 app.use("/api/posts", postRoutes);
 app.use((req, res) =>
