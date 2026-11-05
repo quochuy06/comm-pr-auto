@@ -23,6 +23,7 @@ const links = [
   { href: "/campaigns", label: "Chiến dịch", icon: FolderOpen },
   { href: "/planning", label: "Kế hoạch & lịch đăng", icon: FolderOpen },
   { href: "/studio", label: "Content Studio", icon: Sparkles },
+  { href: "/knowledge", label: "Tri thức thương hiệu", icon: FolderOpen },
   { href: "/approval", label: "Hàng đợi duyệt", icon: CheckCheck },
   { href: "/simulator", label: "Feed & bình luận", icon: MessageSquare },
   { href: "/alerts", label: "Cảnh báo rủi ro", icon: ShieldAlert },
