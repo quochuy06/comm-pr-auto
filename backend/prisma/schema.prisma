@@ -292,3 +292,44 @@ model FacebookInboxReply {
   @@index([pageId, senderId, createdAt])
   @@index([status, createdAt])
 }
+
+// FAQ drafts are never retrieval sources until a later review task activates a version.
+model KnowledgeDocument {
+  id              String @id @default(uuid())
+  pageId          String
+  kind            String @default("FAQ")
+  title           String
+  activeVersionId String? @unique
+  archivedAt      DateTime?
+  createdAt       DateTime @default(now())
+  versions        KnowledgeVersion[] @relation("DocumentVersions")
+  activeVersion   KnowledgeVersion? @relation("ActiveVersion", fields: [activeVersionId], references: [id], onDelete: SetNull)
+  @@index([pageId, createdAt, id])
+}
+
+model KnowledgeVersion {
+  id          String @id @default(uuid())
+  documentId  String
+  document    KnowledgeDocument @relation("DocumentVersions", fields: [documentId], references: [id], onDelete: Cascade)
+  activeFor   KnowledgeDocument? @relation("ActiveVersion")
+  version     Int
+  status      String @default("DRAFT")
+  body        Json
+  extractionStatus String @default("NOT_REQUIRED")
+  createdBy   String
+  reviewedBy  String?
+  reviewedAt  DateTime?
+  createdAt   DateTime @default(now())
+  chunks      KnowledgeChunk[]
+  @@unique([documentId, version])
+}
+
+model KnowledgeChunk {
+  id        String @id @default(uuid())
+  versionId String
+  version   KnowledgeVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  ordinal   Int
+  text      String @db.Text
+  locator   String
+  @@unique([versionId, ordinal])
+}
