@@ -1,0 +1,84 @@
+{
+  "name": "G0 contract check (no external send)",
+  "nodes": [
+    {
+      "id": "trigger",
+      "name": "Contract webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "g0-contract-check",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_EXISTING_INTERNAL_CREDENTIAL",
+          "name": "comm-pr-internal"
+        }
+      },
+      "webhookId": "620e80d9-3796-499c-917c-b7152c03b003"
+    },
+    {
+      "id": "validate",
+      "name": "Validate bounded diagnostic",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const e = $json.body;\nif (!e || e.contractVersion !== 1 || e.kind !== 'knowledge.check' || !e.context || Object.keys(e.context).length || !e.versions || !['input','config','content'].every(k => Number.isSafeInteger(e.versions[k]) && e.versions[k] > 0) || !['jobId','attemptId','pageId','entityId','correlationId'].every(k => typeof e[k] === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/.test(e[k]))) throw new Error('Invalid contract diagnostic');\nreturn [{json:{...e,status:'SUCCEEDED',result:{contractAccepted:true},sources:[]}}];"
+      }
+    },
+    {
+      "id": "response",
+      "name": "Return contract receipt",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        520,
+        0
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Contract webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate bounded diagnostic",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate bounded diagnostic": {
+      "main": [
+        [
+          {
+            "node": "Return contract receipt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false
+}

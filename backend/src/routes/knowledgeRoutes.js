@@ -4,7 +4,7 @@ import { previewFaqDraft } from "../services/knowledgeDraft.js";
 
 import prisma from "../prisma.js";
 import { HttpError } from "../lib/errors.js";
-import { knowledgePage, createFaq, listDocuments, getDocument, searchKnowledge } from "../services/knowledge.js";
+import { knowledgePage, createFaq, listDocuments, getDocument, searchKnowledge, transitionKnowledge } from "../services/knowledge.js";
 
 const router = Router();
 router.post("/documents", roles("ADMIN", "EDITOR"), async (req, res) => {
@@ -24,5 +24,11 @@ router.get("/search", async (req, res) => {
 });
 router.post("/faq/preview", roles("ADMIN", "EDITOR"), (req, res) => {
   res.json({ success: true, data: previewFaqDraft(req.body) });
+});
+for (const [path, action, allowed] of [
+  ["versions", "edit", ["ADMIN", "EDITOR"]], ["submit", "submit", ["ADMIN", "EDITOR"]],
+  ["review", "review", ["ADMIN", "REVIEWER"]], ["archive", "archive", ["ADMIN", "REVIEWER"]],
+]) router.post(`/documents/:id/${path}`, roles(...allowed), async (req, res) => {
+  res.json({ success: true, data: await transitionKnowledge(prisma, knowledgePage(req.query), req.params.id, action, req.body, req.user.email) });
 });
 export default router;

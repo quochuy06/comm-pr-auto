@@ -28,3 +28,50 @@ export function previewAutomationMode(input) {
     ? outcome("PENDING_APPROVAL", ["MODE_REQUIRES_REVIEW"])
     : outcome("ELIGIBLE_FOR_AUTO_REPLY", ["SIMULATION_CHECKS_PASSED"]);
 }
+
+export async function channelModes(db, pageId) {
+  const saved = await db.automationChannel.findMany({ where: { pageId } });
+  return { pageId, channels: ["COMMENT", "MESSENGER"].map(channel =>
+    saved.find(row => row.channel === channel) || { channel, mode: "OFF", version: 0 }),
+    // Advice activation never changes the independent fixed greeting worker.
+    adviceRuntimeEnabled: false };
+}
+
+export async function updateChannelMode(db, pageId, channel, input, actor) {
+  if (!["COMMENT", "MESSENGER"].includes(channel) || !input ||
+      Object.keys(input).some(k => !["mode", "expectedVersion"].includes(k)) ||
+      !["OFF", "SEMI_AUTO", "AUTO"].includes(input.mode) ||
+      !Number.isSafeInteger(input.expectedVersion) || input.expectedVersion < 0)
+    throw new HttpError(400, "Cấu hình kênh không hợp lệ.");
+  try {
+    return await db.$transaction(async tx => {
+      let row;
+      if (input.expectedVersion === 0) {
+        row = await tx.automationChannel.create({ data: { pageId, channel, mode: input.mode } });
+      } else {
+        const updated = await tx.automationChannel.updateMany({
+          where: { pageId, channel, version: input.expectedVersion },
+          data: { mode: input.mode, version: { increment: 1 } },
+        });
+        if (!updated.count) throw new HttpError(409, "Cấu hình đã đổi. Hãy tải lại.");
+        row = await tx.automationChannel.findUnique({ where: { pageId_channel: { pageId, channel } } });
+      }
+      await tx.auditLog.create({ data: { actor, action: "AUTOMATION_CHANNEL_UPDATED", entityId: row.id,
+        detail: JSON.stringify({ pageId, channel, mode: row.mode, version: row.version }) } });
+      return row;
+    });
+  } catch (e) {
+    if (e.code === "P2002") throw new HttpError(409, "Cấu hình đã đổi. Hãy tải lại.");
+    throw e;
+  }
+}
+
+// Every future advice claim must call this guard inside its transaction.
+export async function currentAdviceConfig(db, snapshot) {
+  const row = await db.automationChannel.findUnique({ where: { pageId_channel: {
+    pageId: snapshot.pageId, channel: snapshot.channel,
+  } } });
+  if (!row || row.mode === "OFF" || row.version !== snapshot.configVersion || row.mode !== snapshot.mode)
+    throw new HttpError(409, "Chế độ hoặc phiên bản cấu hình không còn hợp lệ.");
+  return row;
+}
