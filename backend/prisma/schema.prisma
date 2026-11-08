@@ -333,3 +333,14 @@ model KnowledgeChunk {
   locator   String
   @@unique([versionId, ordinal])
 }
+
+// Advice modes are independent from the existing fixed greeting settings.
+model AutomationChannel {
+  id        String @id @default(uuid())
+  pageId    String
+  channel   String
+  mode      String @default("OFF")
+  version   Int @default(1)
+  updatedAt DateTime @updatedAt
+  @@unique([pageId, channel])
+}
