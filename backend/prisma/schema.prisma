@@ -147,6 +147,9 @@ model WorkflowJob {
   id        String   @id @default(uuid())
   kind      String
   mode      String @default("CONTENT")
+  contractSnapshot Json?
+  currentAttemptId String?
+  attempts WorkflowAttempt[]
   imageAsset Json?
   entityId  String
   status    String   @default("QUEUED")
@@ -343,4 +346,16 @@ model AutomationChannel {
   version   Int @default(1)
   updatedAt DateTime @updatedAt
   @@unique([pageId, channel])
+}
+
+model WorkflowAttempt {
+  id String @id @default(uuid())
+  jobId String
+  job WorkflowJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  leaseOwner String
+  leaseUntil DateTime
+  providerJobId String?
+  receipt Json?
+  createdAt DateTime @default(now())
+  @@index([jobId])
 }

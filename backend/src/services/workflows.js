@@ -133,7 +133,7 @@ export function dispatch(job) {
 }
 export async function recoverJobs() {
   const stale = await prisma.workflowJob.findMany({
-    where: { status: { in: ["QUEUED", "RUNNING"] } },
+    where: { status: { in: ["QUEUED", "RUNNING"] }, mode: { not: "CONTRACT_V1" } },
     
   });
   for (const j of stale) {
