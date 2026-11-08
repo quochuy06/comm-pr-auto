@@ -94,3 +94,20 @@ Không dùng docker prune toàn máy hoặc down -v để xử lý lỗi. Nếu 
 ## Thu hồi quyền CI
 
 Xóa Repository Secret `VPS_DEPLOY_KEY` và bỏ public key trong `/home/commpr-deploy/.ssh/authorized_keys`. Web đang chạy không phụ thuộc vào SSH key CI. Không xóa runtime, PostgreSQL volume hoặc n8n-data.
+
+## Cập nhật token Facebook riêng trên VPS
+
+Deploy code không đồng bộ `.local/facebook.env` từ máy phát triển. Sau khi
+xác minh token mới local, chuyển file bằng SSH riêng tới `/root/facebook-new.env`.
+Root chạy `update_facebook_credentials.py` từ commit đã kiểm thử. Helper xác minh
+Page token qua Meta trước khi ghi, yêu cầu cùng Page đang cấu hình, chờ job idle,
+backup hai file cấu hình, chỉ cập nhật token và metadata thời hạn. Các biến token
+đã có trong backend.env cũng được cập nhật để không ghi đè token mới trong file.
+Không đổi App Secret, webhook verify token, DB hoặc công tắc/template tự động.
+
+Helper recreate riêng backend, reload nginx để phân giải backend mới, kiểm tra
+health và đọc lại danh tính qua cấu hình thực trong container. File chuyển tạm
+ở /root bị xóa sau thành công. Backup riêng ở cd/backups/credentials-* có secret,
+không đưa lên Git/chat. Nếu lỗi sau khi ghi, cần kiểm tra riêng backup và health;
+không restore DB. Worker giữ cấu hình hiện có và tiếp tục xử lý bình thường sau
+khi backend chạy lại; helper không chủ động gọi API gửi bài/tin.
