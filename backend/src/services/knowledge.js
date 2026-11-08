@@ -71,3 +71,34 @@ export async function searchKnowledge(db, pageId, query) {
       version: { select: { version: true, documentId: true } } } });
   return { items: candidates };
 }
+
+// Serialize transitions per document; edits never replace the active source.
+export async function transitionKnowledge(db, pageId, id, action, input, actor) {
+  const allowed = action === "edit" ? ["expectedVersion", "title", "question", "answer"] : action === "review" ? ["expectedVersion", "decision", "reason"] : ["expectedVersion", "reason"];
+  if (!input || Object.keys(input).some(k => !allowed.includes(k)) || !Number.isSafeInteger(input.expectedVersion) || input.expectedVersion < 1)
+    throw new HttpError(400, "Dữ liệu hoặc phiên bản không hợp lệ.");
+  if (action === "review" && !["APPROVE", "REJECT"].includes(input.decision)) throw new HttpError(400, "Quyết định không hợp lệ.");
+  const reason = input.reason === undefined ? null : text(input.reason, "Lý do", 1000);
+  return db.$transaction(async tx => {
+    await tx.$queryRaw`SELECT id FROM "KnowledgeDocument" WHERE id = ${id} AND "pageId" = ${pageId} FOR UPDATE`;
+    const doc = await getDocument(tx, pageId, id);
+    const latest = doc.versions[0];
+    if (doc.archivedAt || !latest || latest.version !== input.expectedVersion) throw new HttpError(409, "Tài liệu đã thay đổi hoặc lưu trữ. Hãy tải lại; nội dung form được giữ nguyên.");
+    if (action === "edit") {
+      const { expectedVersion, ...body } = input;
+      const { draft, chunks } = previewFaqDraft(body);
+      await tx.knowledgeVersion.create({ data: { documentId: id, version: latest.version + 1, body: draft, createdBy: actor, chunks: { create: chunks } } });
+    } else if (action === "submit") {
+      if (latest.status !== "DRAFT") throw new HttpError(409, "Chỉ gửi duyệt bản nháp.");
+      await tx.knowledgeVersion.update({ where: { id: latest.id }, data: { status: "PENDING_APPROVAL" } });
+    } else if (action === "review") {
+      if (latest.status !== "PENDING_APPROVAL") throw new HttpError(409, "Phiên bản không còn chờ duyệt.");
+      await tx.knowledgeVersion.update({ where: { id: latest.id }, data: { status: input.decision === "APPROVE" ? "APPROVED" : "REJECTED", reviewedBy: actor, reviewedAt: new Date() } });
+      if (input.decision === "APPROVE") await tx.knowledgeDocument.update({ where: { id }, data: { activeVersionId: latest.id, title: latest.body.title } });
+    } else if (action === "archive") {
+      await tx.knowledgeDocument.update({ where: { id }, data: { archivedAt: new Date(), activeVersionId: null } });
+    } else throw new HttpError(400, "Thao tác không hợp lệ.");
+    await audit(tx, actor, `KNOWLEDGE_${action.toUpperCase()}`, id, JSON.stringify({ version: latest.version, decision: input.decision, reason }));
+    return getDocument(tx, pageId, id);
+  });
+}

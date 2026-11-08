@@ -72,7 +72,36 @@ test("FAQ persistence: roles, Page isolation, pagination and approved-only retri
     assert.equal((await request(`/documents/${foreign.id}`)).status, 404);
     assert.equal((await request(`/documents?cursor=${foreign.id}`)).status, 400);
     assert.equal((await request("/documents")).body.data.items.some(d => d.id === foreign.id), false);
-    // Future review state fixtures verify retrieval boundaries; no approval API exists yet.
+    // Full lifecycle and stale submissions use a separate document.
+    const lifecycle = (await request("/documents", "POST", faq)).body.data;
+    documents.push(lifecycle.id);
+    const base = `/documents/${lifecycle.id}`;
+    assert.equal((await request(`${base}/review`, "POST", {expectedVersion:1, decision:"APPROVE"}, "EDITOR")).status, 403);
+    assert.equal((await request(`${base}/review`, "POST", {expectedVersion:1, decision:"APPROVE"}, "REVIEWER")).status, 409);
+    assert.equal((await request(`${base}/submit`, "POST", {expectedVersion:1})).status, 200);
+    const reviews = await Promise.all(["APPROVE", "REJECT"].map(decision => request(`${base}/review`, "POST", {expectedVersion:1, decision}, "REVIEWER")));
+    assert.deepEqual(reviews.map(r => r.status).sort(), [200,409]);
+    // Ensure version 1 is approved regardless of which concurrent request won.
+    let state = (await request(base)).body.data;
+    if (state.versions[0].status !== "APPROVED") {
+      await request(`${base}/versions`, "POST", {expectedVersion:1,title:marker,question:"Câu hỏi",answer:marker});
+      await request(`${base}/submit`, "POST", {expectedVersion:2});
+      await request(`${base}/review`, "POST", {expectedVersion:2,decision:"APPROVE"}, "REVIEWER");
+      state = (await request(base)).body.data;
+    }
+    const current = state.versions[0].version;
+    const active = state.activeVersionId;
+    assert.ok(active);
+    assert.equal((await request(`${base}/versions`, "POST", {expectedVersion:current,title:marker,question:"Mới?",answer:"Nội dung mới"})).status, 200);
+    state = (await request(base)).body.data;
+    assert.equal(state.activeVersionId, active);
+    assert.equal(state.versions[0].status, "DRAFT");
+    assert.equal((await request(`${base}/submit`, "POST", {expectedVersion:current})).status, 409);
+    assert.equal((await request(`${base}/archive`, "POST", {expectedVersion:current+1}, "EDITOR")).status, 403);
+    assert.equal((await request(`${base}/archive`, "POST", {expectedVersion:current+1}, "REVIEWER")).status, 200);
+    assert.equal((await request(`${base}/versions`, "POST", {expectedVersion:current+1,title:marker,question:"?",answer:"!"})).status, 409);
+    // Retrieval boundaries for inactive approval fixtures.
+
     const version = detail.body.data.versions[0];
     await db.knowledgeVersion.update({ where: { id: version.id }, data: {
       status: "APPROVED", reviewedBy: users[0].email, reviewedAt: new Date(),
@@ -85,7 +114,7 @@ test("FAQ persistence: roles, Page isolation, pagination and approved-only retri
     process.env.FACEBOOK_PAGE_ID = page;
     await db.knowledgeDocument.update({ where: { id: documents[0] }, data: { archivedAt: new Date() } });
     assert.equal((await request(`/search?q=${marker}`)).body.data.items.length, 0);
-    assert.equal(await db.auditLog.count({ where: { entityId: { in: documents }, action: "KNOWLEDGE_DRAFT_CREATED" } }), 2);
+    assert.equal(await db.auditLog.count({ where: { entityId: { in: documents }, action: "KNOWLEDGE_DRAFT_CREATED" } }), 3);
   } finally {
     if (server) await new Promise(resolve => server.close(resolve));
     await db.knowledgeDocument.deleteMany({ where: { id: { in: documents } } });
