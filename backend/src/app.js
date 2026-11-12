@@ -16,6 +16,7 @@ import { prepareImage } from "./controllers/imageController.js";
 import { handleN8nCallback } from "./controllers/approvalController.js";
 import { handleTextCallback } from "./controllers/textWorkflowController.js";
 import insightRoutes from "./routes/insightRoutes.js";
+import videoRoutes from "./routes/videoRoutes.js";
 import expansionRoutes, { expansionInternal } from "./routes/expansionRoutes.js";
 import { mediaDir } from "./services/images.js";
 import facebookRoutes, { facebookWebhook } from "./routes/facebookRoutes.js";
@@ -63,6 +64,7 @@ app.use("/api/automation", automationModeRoutes);
 app.use("/api/knowledge", knowledgeRoutes);
 app.use("/api", coreRoutes, approvalRoutes, communityRoutes, expansionRoutes, insightRoutes, facebookRoutes);
 app.use("/api/posts", postRoutes);
+app.use("/api/video", videoRoutes);
 app.use((req, res) =>
   res.status(404).json({ success: false, message: "Không tìm thấy API." }),
 );
