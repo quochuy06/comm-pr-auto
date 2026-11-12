@@ -92,6 +92,36 @@ export interface Settings {
   negativeThreshold: number;
   windowMinutes: number;
 }
+export type VideoStatus = "PENDING" | "SUCCEEDED" | "FAILED";
+export type VideoAspectRatio = "16:9" | "9:16" | "1:1";
+export interface VideoJobResult {
+  url: string;
+  sha256: string;
+  mimeType: string;
+  duration: number;
+  width: number;
+  height: number;
+  codec: string;
+  verification: "FFPROBE" | "CONTAINER_ONLY";
+}
+export interface VideoJob {
+  jobId: string;
+  assetId: string | null;
+  status: VideoStatus;
+  provider: "agnes" | "mock";
+  prompt: string;
+  params: {
+    duration: number;
+    aspectRatio: VideoAspectRatio;
+    width: number;
+    height: number;
+    scriptVersion: number;
+  };
+  result: VideoJobResult | null;
+  error: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
 export interface Dashboard {
   posts: number;
   campaigns: number;
