@@ -42,6 +42,16 @@ export function validateVideoInput(input = {}) {
   };
 }
 
+export async function listVideoJobs(db, { limit = 50 } = {}) {
+  const capped = Math.min(Math.max(Number(limit) || 50, 1), 100);
+  const assets = await db.videoAsset.findMany({
+    orderBy: { createdAt: "desc" },
+    take: capped,
+    include: { job: { include: { attempts: true } } },
+  });
+  return Promise.all(assets.map((a) => getVideoState(db, a.jobId)));
+}
+
 export async function getVideoState(db, jobId) {
   const asset = await db.videoAsset.findUnique({
     where: { jobId },

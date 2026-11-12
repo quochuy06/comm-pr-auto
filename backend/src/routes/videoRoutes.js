@@ -2,7 +2,7 @@ import { Router } from "express";
 import prisma from "../prisma.js";
 import { HttpError } from "../lib/errors.js";
 import { roles } from "../middleware/auth.js";
-import { createVideoJob, syncVideoJob, getVideoState } from "../services/videoJobs.js";
+import { createVideoJob, syncVideoJob, getVideoState, listVideoJobs } from "../services/videoJobs.js";
 
 // Demo API for AI video generation (HOANG-API04). Generating is a provider
 // read/poll afterwards — GET syncs only while the job is PENDING and never
@@ -14,6 +14,10 @@ const idOf = (req) => {
     throw new HttpError(400, "ID tác vụ video không hợp lệ.");
   return req.params.id;
 };
+
+router.get("/jobs", async (req, res) => {
+  res.json({ success: true, data: await listVideoJobs(prisma, { limit: req.query.limit }) });
+});
 
 router.post("/jobs", roles("ADMIN", "EDITOR"), async (req, res) => {
   res.status(201).json({
