@@ -208,6 +208,46 @@ model KeywordRule {
   @@index([pageId, channel, active])
 }
 
+// HUY-API02: PR comment configuration, approved PR content and a per-publication
+// outbox. publicationKey is unique so one publication gets exactly one PR job.
+model PrConfig {
+  id        String   @id @default("default")
+  pageId    String
+  mode      String   @default("OFF") // OFF | SEMI_AUTO | AUTO
+  version   Int      @default(1)
+  updatedAt DateTime @updatedAt
+}
+
+model PrContent {
+  id         String   @id @default(uuid())
+  pageId     String
+  text       String   @db.Text
+  version    Int      @default(1)
+  status     String   @default("DRAFT") // DRAFT | APPROVED | ARCHIVED
+  createdBy  String?
+  reviewedBy String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([pageId, status])
+}
+
+model PrOutbox {
+  id              String   @id @default(uuid())
+  publicationKey  String   @unique
+  postId          String?
+  scheduleId      String?
+  pageId          String
+  contentId       String?
+  contentSnapshot Json?
+  status          String   @default("PENDING") // PENDING | SENT | FAILED | UNCERTAIN
+  externalId      String?
+  error           String?  @db.Text
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([status, createdAt])
+}
 
 model Settings {
   id                String   @id @default("default")

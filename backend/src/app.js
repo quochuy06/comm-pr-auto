@@ -18,6 +18,7 @@ import { handleTextCallback } from "./controllers/textWorkflowController.js";
 import insightRoutes from "./routes/insightRoutes.js";
 import videoRoutes from "./routes/videoRoutes.js";
 import keywordRoutes from "./routes/keywordRoutes.js";
+import prRoutes from "./routes/prRoutes.js";
 import expansionRoutes, { expansionInternal } from "./routes/expansionRoutes.js";
 import { mediaDir } from "./services/images.js";
 import facebookRoutes, { facebookWebhook } from "./routes/facebookRoutes.js";
@@ -67,6 +68,7 @@ app.use("/api", coreRoutes, approvalRoutes, communityRoutes, expansionRoutes, in
 app.use("/api/posts", postRoutes);
 app.use("/api/video", videoRoutes);
 app.use("/api/keyword-rules", keywordRoutes);
+app.use("/api", prRoutes);
 app.use((req, res) =>
   res.status(404).json({ success: false, message: "Không tìm thấy API." }),
 );
