@@ -156,8 +156,97 @@ model WorkflowJob {
   error     String?  @db.Text
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  videoAsset VideoAsset?
 
   @@index([entityId, createdAt])
+}
+
+// AI video generation (HOANG-API04). Job/attempt/provider-job-id tracking reuses
+// WorkflowJob/WorkflowAttempt; this table stores the request and the verified
+// MP4 asset. A SUCCEEDED asset is not a published video.
+model VideoAsset {
+  id         String   @id @default(uuid())
+  jobId      String   @unique
+  job        WorkflowJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  provider   String
+  prompt     String   @db.Text
+  params     Json?
+  status     String   @default("PENDING") // PENDING | SUCCEEDED | FAILED
+  filePath   String?
+  sha256     String?
+  mimeType   String?
+  duration   Float?
+  width      Int?
+  height     Int?
+  codec      String?
+  verification String? // FFPROBE | CONTAINER_ONLY
+  error      String?  @db.Text
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([status, createdAt])
+}
+
+// PHUC-API02: keyword rules per Page/channel. keyword is stored normalized
+// (lowercase, no diacritics, collapsed spaces); keywordRaw keeps display form.
+// Rules never send anything themselves — dry-run only routes to a reply/source.
+model KeywordRule {
+  id          String   @id @default(uuid())
+  pageId      String
+  channel     String   // COMMENT | MESSENGER
+  keyword     String
+  keywordRaw  String
+  matchType   String   @default("PHRASE") // WORD | PHRASE
+  priority    Int      @default(1)
+  replyText   String?  @db.Text
+  sourceDocId String?
+  active      Boolean  @default(true)
+  createdBy   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([pageId, channel, active])
+}
+
+// HUY-API02: PR comment configuration, approved PR content and a per-publication
+// outbox. publicationKey is unique so one publication gets exactly one PR job.
+model PrConfig {
+  id        String   @id @default("default")
+  pageId    String
+  mode      String   @default("OFF") // OFF | SEMI_AUTO | AUTO
+  version   Int      @default(1)
+  updatedAt DateTime @updatedAt
+}
+
+model PrContent {
+  id         String   @id @default(uuid())
+  pageId     String
+  text       String   @db.Text
+  version    Int      @default(1)
+  status     String   @default("DRAFT") // DRAFT | APPROVED | ARCHIVED
+  createdBy  String?
+  reviewedBy String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([pageId, status])
+}
+
+model PrOutbox {
+  id              String   @id @default(uuid())
+  publicationKey  String   @unique
+  postId          String?
+  scheduleId      String?
+  pageId          String
+  contentId       String?
+  contentSnapshot Json?
+  status          String   @default("PENDING") // PENDING | SENT | FAILED | UNCERTAIN
+  externalId      String?
+  error           String?  @db.Text
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([status, createdAt])
 }
 
 model Settings {

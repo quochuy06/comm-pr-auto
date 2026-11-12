@@ -58,7 +58,7 @@ jobs:
         working-directory: backend
         run: node --test --test-concurrency=1 test/*.test.js
       - name: Deployment safety tests
-        run: python3 -m unittest deploy/test_vps.py deploy/test_cd.py
+        run: python3 -m unittest deploy/test_vps.py deploy/test_cd.py deploy/test_migrate_release.py deploy/test_facebook_credentials.py
       - name: Frontend lint and production build
         working-directory: frontend
         env:
