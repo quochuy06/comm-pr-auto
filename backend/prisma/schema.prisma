@@ -187,6 +187,28 @@ model VideoAsset {
   @@index([status, createdAt])
 }
 
+// PHUC-API02: keyword rules per Page/channel. keyword is stored normalized
+// (lowercase, no diacritics, collapsed spaces); keywordRaw keeps display form.
+// Rules never send anything themselves — dry-run only routes to a reply/source.
+model KeywordRule {
+  id          String   @id @default(uuid())
+  pageId      String
+  channel     String   // COMMENT | MESSENGER
+  keyword     String
+  keywordRaw  String
+  matchType   String   @default("PHRASE") // WORD | PHRASE
+  priority    Int      @default(1)
+  replyText   String?  @db.Text
+  sourceDocId String?
+  active      Boolean  @default(true)
+  createdBy   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([pageId, channel, active])
+}
+
+
 model Settings {
   id                String   @id @default("default")
   mode              String   @default("CONDITIONAL")
