@@ -13,6 +13,7 @@ import {
   LogOut,
   Radio,
   Video,
+  Bot,
 } from "lucide-react";
 import { api, send } from "@/lib/api";
 import type { User } from "@/lib/types";
@@ -31,6 +32,7 @@ const links = [
   { href: "/alerts", label: "Cảnh báo rủi ro", icon: ShieldAlert },
   { href: "/insights", label: "Chuyển thể & báo cáo", icon: LayoutDashboard },
   { href: "/settings", label: "Cài đặt", icon: Settings },
+  { href: "/settings/automation", label: "Tự động hóa", icon: Bot },
 ];
 export default function Shell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();

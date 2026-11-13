@@ -1,0 +1,2 @@
+Hello TXT from fixture.
+Second line with more words for chunking tests.
