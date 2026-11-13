@@ -19,6 +19,7 @@ import insightRoutes from "./routes/insightRoutes.js";
 import videoRoutes from "./routes/videoRoutes.js";
 import keywordRoutes from "./routes/keywordRoutes.js";
 import documentRoutes from "./routes/documentRoutes.js";
+import retrievalRoutes from "./routes/retrievalRoutes.js";
 import replyDecisionRoutes from "./routes/replyDecisionRoutes.js";
 import videoScheduleRoutes from "./routes/videoScheduleRoutes.js";
 import prRoutes from "./routes/prRoutes.js";
@@ -73,6 +74,7 @@ app.use("/api/video", videoRoutes);
 app.use("/api/keyword-rules", keywordRoutes);
 app.use("/api/documents", documentRoutes);
 app.use("/api", prRoutes);
+app.use("/api", retrievalRoutes);
 app.use("/api", replyDecisionRoutes);
 app.use("/api", videoScheduleRoutes);
 app.use((req, res) =>

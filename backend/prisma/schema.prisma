@@ -188,6 +188,19 @@ model VideoAsset {
   @@index([status, createdAt])
 }
 
+// HOANG-API03: brand voice config for grounded answer drafting. The retrieval
+// contract returns it alongside sources so workflows draft in this voice.
+model BrandVoice {
+  id        String   @id @default("default")
+  pageId    String
+  tone      String   @default("thân thiện, lịch sự")
+  style     String?  @db.Text
+  forbidden String?  @db.Text
+  version   Int      @default(1)
+  updatedAt DateTime @updatedAt
+}
+
+
 // PHUC-API02: keyword rules per Page/channel. keyword is stored normalized
 // (lowercase, no diacritics, collapsed spaces); keywordRaw keeps display form.
 // Rules never send anything themselves — dry-run only routes to a reply/source.
