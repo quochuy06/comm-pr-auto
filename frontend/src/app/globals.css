@@ -328,6 +328,10 @@ textarea {
   background: #fff1f2;
   color: #be123c;
 }
+.badge.warn {
+  background: #fffbeb;
+  color: #b45309;
+}
 .notice {
   padding: 13px 16px;
   border-radius: 9px;
