@@ -19,6 +19,7 @@ import insightRoutes from "./routes/insightRoutes.js";
 import videoRoutes from "./routes/videoRoutes.js";
 import keywordRoutes from "./routes/keywordRoutes.js";
 import documentRoutes from "./routes/documentRoutes.js";
+import replyDecisionRoutes from "./routes/replyDecisionRoutes.js";
 import prRoutes from "./routes/prRoutes.js";
 import expansionRoutes, { expansionInternal } from "./routes/expansionRoutes.js";
 import { mediaDir } from "./services/images.js";
@@ -71,6 +72,7 @@ app.use("/api/video", videoRoutes);
 app.use("/api/keyword-rules", keywordRoutes);
 app.use("/api/documents", documentRoutes);
 app.use("/api", prRoutes);
+app.use("/api", replyDecisionRoutes);
 app.use((req, res) =>
   res.status(404).json({ success: false, message: "Không tìm thấy API." }),
 );
