@@ -14,6 +14,7 @@ import {
   Radio,
   Video,
   Bot,
+  FileText,
 } from "lucide-react";
 import { api, send } from "@/lib/api";
 import type { User } from "@/lib/types";
@@ -27,6 +28,7 @@ const links = [
   { href: "/studio", label: "Content Studio", icon: Sparkles },
   { href: "/studio/video", label: "Video", icon: Video },
   { href: "/knowledge", label: "Tri thức thương hiệu", icon: FolderOpen },
+  { href: "/knowledge/documents", label: "Tài liệu", icon: FileText },
   { href: "/approval", label: "Hàng đợi duyệt", icon: CheckCheck },
   { href: "/simulator", label: "Feed & bình luận", icon: MessageSquare },
   { href: "/alerts", label: "Cảnh báo rủi ro", icon: ShieldAlert },
