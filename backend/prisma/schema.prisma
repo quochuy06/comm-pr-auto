@@ -396,7 +396,27 @@ model KnowledgeDocument {
   createdAt       DateTime @default(now())
   versions        KnowledgeVersion[] @relation("DocumentVersions")
   activeVersion   KnowledgeVersion? @relation("ActiveVersion", fields: [activeVersionId], references: [id], onDelete: SetNull)
+  sourceFile      SourceFile?
   @@index([pageId, createdAt, id])
+}
+
+// HOANG-API02: uploaded source files (PDF/DOCX/TXT). Raw bytes live outside
+// Git; extraction failures are recorded, never faked. Parsed text becomes a
+// DRAFT KnowledgeVersion + chunks — unpublished until a review activates it.
+model SourceFile {
+  id               String   @id @default(uuid())
+  documentId       String   @unique
+  document         KnowledgeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  filename         String
+  mimeType         String
+  sizeBytes        Int
+  sha256           String
+  filePath         String
+  extractionStatus String   @default("PENDING") // PENDING | OK | FAILED
+  extractionError  String?  @db.Text
+  createdAt        DateTime @default(now())
+
+  @@index([extractionStatus, createdAt])
 }
 
 model KnowledgeVersion {
