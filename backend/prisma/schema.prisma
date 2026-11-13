@@ -157,6 +157,7 @@ model WorkflowJob {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   videoAsset VideoAsset?
+  videoSchedules VideoSchedule[]
 
   @@index([entityId, createdAt])
 }
@@ -271,6 +272,22 @@ model PrOutbox {
   updatedAt       DateTime @updatedAt
 
   @@index([status, createdAt])
+}
+
+// HUY-API01-A: video scheduling (phần tách của HUY-API01, CHƯA có Meta
+// transport — upload/đăng thật thuộc HUY-WF03). Một video job một lịch.
+model VideoSchedule {
+  id          String   @id @default(uuid())
+  videoJobId  String
+  job         WorkflowJob @relation(fields: [videoJobId], references: [id], onDelete: Cascade)
+  scheduledAt DateTime
+  target      String   @default("FACEBOOK_PAGE")
+  status      String   @default("PENDING") // PENDING | CANCELLED | PUBLISHING | PUBLISHED | FAILED
+  error       String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([status, scheduledAt])
 }
 
 model Settings {
