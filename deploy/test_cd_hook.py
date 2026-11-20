@@ -138,6 +138,15 @@ class PipelineSafety(unittest.TestCase):
         self.assertTrue(url.endswith("/" + pipeline.TEST_DB_NAME))
         self.assertTrue(url.startswith("postgresql://" + pipeline.TEST_DB_USER + ":"))
 
+    def test_backend_test_script_quotes_node_snippet_for_sh(self):
+        script = pipeline.backend_test_script()
+        # The node -e snippet must be single-quoted: in double quotes sh would
+        # expand $disconnect to an empty string and break the syntax.
+        self.assertIn("node --input-type=module -e '", script)
+        self.assertIn("p.$disconnect();'", script)
+        self.assertIn("test/*.test.js", script)
+        self.assertEqual(script.count("node --input-type=module -e"), 1)
+
     def test_run_reports_failure(self):
         with self.assertRaisesRegex(RuntimeError, "Command failed"):
             pipeline.run([sys.executable, "-c", "import sys; sys.exit(3)"])

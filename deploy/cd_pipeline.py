@@ -51,7 +51,7 @@ def run(args, check=True, **kwargs):
     kwargs.setdefault("stderr", subprocess.PIPE)
     result = subprocess.run([str(a) for a in args], **kwargs)
     if check and result.returncode:
-        tail = (result.stderr or b"").decode(errors="replace").strip().splitlines()[-3:]
+        tail = (result.stderr or b"").decode(errors="replace").strip().splitlines()[-8:]
         raise RuntimeError("Command failed (%s): %s" % (" ".join(str(a) for a in args[:3]), " | ".join(tail)))
     return result.stdout
 
@@ -134,6 +134,13 @@ def build_images(source, sha):
          "-t", "comm-pr-frontend:" + sha, str(source)])
 
 
+def backend_test_script():
+    # Single quotes keep the shell from eating $disconnect inside sh -c.
+    return ("npx prisma migrate deploy >/dev/null && node --input-type=module -e 'import p from "
+            "\"./src/prisma.js\"; await p.settings.upsert({where:{id:\"default\"},create:{id:\"default\"},"
+            "update:{}}); await p.$disconnect();' && node --test --test-concurrency=1 test/*.test.js")
+
+
 def backend_tests(source, sha):
     suffix = sha[:12]
     network, database = "commpr-cd-test-" + suffix, "commpr-cd-pg-" + suffix
@@ -152,16 +159,13 @@ def backend_tests(source, sha):
         else:
             raise RuntimeError("Test database did not become ready")
         log("backend API/database tests")
-        script = ("npx prisma migrate deploy >/dev/null && node --input-type=module -e \"import p from "
-                  "'./src/prisma.js'; await p.settings.upsert({where:{id:'default'},create:{id:'default'},"
-                  "update:{}}); await p.$disconnect();\" && node --test --test-concurrency=1 test/*.test.js")
         run(["docker", "run", "--rm", "--user", "root:0", "--network", network,
              "-e", "RUN_DB_TESTS=true",
              "-e", "DATABASE_URL=" + test_db_url(database),
              "-e", "N8N_CALLBACK_SECRET=ci-only-callback-secret-not-a-production-credential",
              "-e", "N8N_BASE_URL=http://127.0.0.1:9", "-e", "COOKIE_SECURE=false", "-e", "NODE_ENV=test",
              "-v", str(source / "backend" / "test") + ":/app/backend/test:ro",
-             "comm-pr-backend:" + sha, "sh", "-c", script])
+             "comm-pr-backend:" + sha, "sh", "-c", backend_test_script()])
     finally:
         run(["docker", "rm", "-f", database], check=False)
         run(["docker", "network", "rm", network], check=False)
