@@ -37,8 +37,8 @@ for node in json.loads(current['nodes']):
 credentials=[{'id':'comm-pr-callback','name':'Comm PR Internal Token','type':'httpHeaderAuth','data':{'name':'x-comm-token','value':secret}}]
 if key: credentials.append({'id':'comm-pr-gemini','name':'Comm PR Gemini','type':'httpHeaderAuth','data':{'name':'x-goog-api-key','value':key}})
 elif not any(c['id']=='comm-pr-gemini' for c in sql('SELECT id FROM credentials_entity')): raise RuntimeError('Gemini key not found. Configure Comm PR Gemini credential in n8n.')
-ids={'content':current['id'],'image':'commPRImage01','planning':'commPRPlanning01','publishing':'commPRPublish01','repurpose':'commPRRepurpose01','report':'commPRReport01','community':'commPRCommunity1','crisis':'commPRCrisis01'}
-files={'content':'hoang-01-content.json','image':'hoang-02-image.json','planning':'huy-01-planning.json','publishing':'huy-02-publishing.json','repurpose':'bao-01-repurpose.json','report':'bao-02-report.json','community':'phuc-01-community.json','crisis':'phuc-02-crisis.json'}
+ids={'content':current['id'],'image':'commPRImage01','planning':'commPRPlanning01','publishing':'commPRPublish01','repurpose':'commPRRepurpose01','report':'commPRReport01','community':'commPRCommunity1','crisis':'commPRCrisis01','ingest':'commPRIngest01','knowledgeCheck':'commPRCheck01','answerDraft':'commPRAnswer01'}
+files={'content':'hoang-01-content.json','image':'hoang-02-image.json','planning':'huy-01-planning.json','publishing':'huy-02-publishing.json','repurpose':'bao-01-repurpose.json','report':'bao-02-report.json','community':'phuc-01-community.json','crisis':'phuc-02-crisis.json','ingest':'hoang-03-document-ingest.json','knowledgeCheck':'hoang-04-knowledge-check.json','answerDraft':'hoang-05-answer-draft.json'}
 bundle=[]
 for kind,filename in files.items():
     w=json.loads((ROOT/'n8n/workflows'/filename).read_text());w['id']=ids[kind]

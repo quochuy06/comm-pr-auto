@@ -1,0 +1,619 @@
+{
+  "name": "Hoàng · 03 · Tiếp nhận tài liệu",
+  "nodes": [
+    {
+      "id": "g1-1",
+      "name": "01 Receive request",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ingest-document",
+        "authentication": "headerAuth",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "webhookId": "comm-pr-ingest-document",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "comm-pr-callback",
+          "name": "Comm PR Internal Token"
+        }
+      }
+    },
+    {
+      "id": "g1-2",
+      "name": "02 Validate identifiers",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const b=$json.body;const id=v=>typeof v==='string'&&/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/.test(v);const ver=v=>Number.isSafeInteger(v)&&v>=1;if(!b||b.contractVersion!==1||!id(b.jobId)||!id(b.attemptId)||!id(b.pageId)||!id(b.entityId)||!id(b.correlationId)||!b.versions||!ver(b.versions.input)||!ver(b.versions.config)||!ver(b.versions.content)||!b.context||typeof b.context!=='object'||Array.isArray(b.context))throw new Error('Invalid workflow input');if(b.kind!==\"knowledge.ingest\")throw new Error('Wrong workflow kind');if(!id(b.context.documentId)||Object.keys(b.context).length!==1)throw new Error('Invalid ingest context');return {json:{env:b}};"
+      }
+    },
+    {
+      "id": "g1-3",
+      "name": "03 Limit context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const e=$json.env;const raw=JSON.stringify(e.context);if(raw.length>30000)throw new Error('Context too large');return {json:{...$json,startedAt:new Date().toISOString()}};"
+      }
+    },
+    {
+      "id": "g1-4",
+      "name": "04 Build metadata request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        780,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const e=$json.env;return {json:{env:e,request:{documentId:e.context.documentId,pageId:e.pageId}}};"
+      }
+    },
+    {
+      "id": "g1-5",
+      "name": "05 Fetch document metadata",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1040,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://172.17.0.1:5000/api/workflow-internal/knowledge/document-meta",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.request) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "comm-pr-callback",
+          "name": "Comm PR Internal Token"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "g1-6",
+      "name": "06 Validate metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const x=$json;const env=$('02 Validate identifiers').first().json.env;const r=x.data;if(!r||!r.document||!r.sourceFile)return {json:{env,fail:{code:'SOURCE_MISSING',message:'Tài liệu chưa có tệp nguồn hợp lệ.'}}};if(r.document.archived)return {json:{env,fail:{code:'DOCUMENT_ARCHIVED',message:'Tài liệu đã lưu trữ; không xử lý tiếp.'}}};const f=r.sourceFile;if(!Number.isSafeInteger(f.sizeBytes)||f.sizeBytes<=0||f.sizeBytes>5*1024*1024)return {json:{env,fail:{code:'FILE_TOO_LARGE',message:'Tệp rỗng hoặc vượt giới hạn 5 MB.'}}};if(!/^[a-f0-9]{64}$/.test(f.sha256||''))return {json:{env,fail:{code:'CHECKSUM_INVALID',message:'Checksum tệp nguồn không hợp lệ.'}}};return {json:{env,meta:r}};"
+      }
+    },
+    {
+      "id": "g1-7",
+      "name": "07 Metadata valid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        0,
+        240
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "07 Metadata valid",
+              "leftValue": "={{ !$json.fail }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "g1-8",
+      "name": "08 Build parse request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        240
+      ],
+      "parameters": {
+        "jsCode": "const x=$json;return {json:{env:x.env,request:{documentId:x.env.context.documentId,pageId:x.env.pageId}}};"
+      }
+    },
+    {
+      "id": "g1-9",
+      "name": "09 Parse with backend",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        520,
+        240
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://172.17.0.1:5000/api/workflow-internal/knowledge/extract",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.request) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "comm-pr-callback",
+          "name": "Comm PR Internal Token"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "g1-10",
+      "name": "10 Validate extraction",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        780,
+        240
+      ],
+      "parameters": {
+        "jsCode": "const x=$json;const env=$('02 Validate identifiers').first().json.env;const r=x.data;if(!r||r.extractionStatus!=='OK'||typeof r.text!=='string'||!r.text.trim())return {json:{env,fail:{code:'EXTRACTION_FAILED',message:(r&&r.reason)||'Không trích xuất được văn bản từ tệp.'}}};return {json:{env,raw:r.text}};"
+      }
+    },
+    {
+      "id": "g1-11",
+      "name": "11 Extraction ok",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1040,
+        240
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "11 Extraction ok",
+              "leftValue": "={{ !$json.fail }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "g1-12",
+      "name": "12 Normalize and chunk",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        240
+      ],
+      "parameters": {
+        "jsCode": "const x=$json;const clean=String(x.raw).replace(/\\r\\n/g,'\\n').replace(/[ \\t]+/g,' ').replace(/\\n{3,}/g,'\\n\\n').trim();if(!clean)return {json:{env:x.env,fail:{code:'EMPTY_TEXT',message:'Văn bản rỗng sau chuẩn hóa.'}}};const chunks=[];let rest=clean;while(rest.length&&chunks.length<500){let cut=rest.length<=1200?rest.length:rest.lastIndexOf(' ',1200);if(cut<200)cut=1200;const piece=rest.slice(0,cut).trim();if(piece)chunks.push({ordinal:chunks.length+1,text:piece,locator:'workflow:upload#'+(chunks.length+1)});rest=rest.slice(cut).trim();}if(!chunks.length||chunks.length>500)return {json:{env:x.env,fail:{code:'CHUNKING_FAILED',message:'Tách đoạn không hợp lệ.'}}};return {json:{env:x.env,chunks}};"
+      }
+    },
+    {
+      "id": "g1-13",
+      "name": "13 Chunking ok",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        0,
+        480
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "13 Chunking ok",
+              "leftValue": "={{ !$json.fail }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "g1-14",
+      "name": "14 Build draft request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        480
+      ],
+      "parameters": {
+        "jsCode": "const x=$json;return {json:{env:x.env,request:{documentId:x.env.context.documentId,pageId:x.env.pageId,chunks:x.chunks}}};"
+      }
+    },
+    {
+      "id": "g1-15",
+      "name": "15 Persist draft chunks",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        520,
+        480
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://172.17.0.1:5000/api/workflow-internal/knowledge/drafts",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.request) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "comm-pr-callback",
+          "name": "Comm PR Internal Token"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "g1-16",
+      "name": "16 Build ingest result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        780,
+        480
+      ],
+      "parameters": {
+        "jsCode": "const x=$json;const env=$('02 Validate identifiers').first().json.env;const r=x.data;if(!r||!r.versionId||!Number.isSafeInteger(r.chunkCount))return {json:{env,status:'FAILED',error:{code:'DRAFT_SAVE_FAILED',message:'Không lưu được bản nháp.'},sources:[]}};return {json:{env,status:'SUCCEEDED',result:{documentId:env.context.documentId,extractionStatus:'OK',chunkCount:r.chunkCount,versionId:r.versionId},sources:[]}};"
+      }
+    },
+    {
+      "id": "g1-17",
+      "name": "17 Build failure result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        480
+      ],
+      "parameters": {
+        "jsCode": "const x=$json;const env=x.env||$('02 Validate identifiers').first().json.env;const f=x.fail||{code:'WORKFLOW_ERROR',message:'Bước xử lý không hoàn tất; không có kết quả để lưu.'};return {json:{env,status:'FAILED',error:{code:f.code,message:String(f.message).slice(0,1000)},sources:[]}};"
+      }
+    },
+    {
+      "id": "g1-18",
+      "name": "18 Build callback",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        480
+      ],
+      "parameters": {
+        "jsCode": "const x=$json;const e=x.env;const cb={contractVersion:1,jobId:e.jobId,attemptId:e.attemptId,kind:e.kind,pageId:e.pageId,entityId:e.entityId,correlationId:e.correlationId,versions:e.versions,context:e.context,status:x.status,sources:x.sources||[]};if(x.status==='SUCCEEDED'||x.status==='PARTIAL'){cb.result=x.result;}else{cb.error=x.error;}return {json:cb};"
+      }
+    },
+    {
+      "id": "g1-19",
+      "name": "19 Persist contract callback",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        0,
+        720
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://172.17.0.1:5000/api/webhooks/contract-v1",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "comm-pr-callback",
+          "name": "Comm PR Internal Token"
+        }
+      },
+      "continueOnFail": true
+    }
+  ],
+  "connections": {
+    "01 Receive request": {
+      "main": [
+        [
+          {
+            "node": "02 Validate identifiers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "02 Validate identifiers": {
+      "main": [
+        [
+          {
+            "node": "03 Limit context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "03 Limit context": {
+      "main": [
+        [
+          {
+            "node": "04 Build metadata request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "04 Build metadata request": {
+      "main": [
+        [
+          {
+            "node": "05 Fetch document metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "05 Fetch document metadata": {
+      "main": [
+        [
+          {
+            "node": "06 Validate metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "06 Validate metadata": {
+      "main": [
+        [
+          {
+            "node": "07 Metadata valid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "07 Metadata valid": {
+      "main": [
+        [
+          {
+            "node": "08 Build parse request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "17 Build failure result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "08 Build parse request": {
+      "main": [
+        [
+          {
+            "node": "09 Parse with backend",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "09 Parse with backend": {
+      "main": [
+        [
+          {
+            "node": "10 Validate extraction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "10 Validate extraction": {
+      "main": [
+        [
+          {
+            "node": "11 Extraction ok",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "11 Extraction ok": {
+      "main": [
+        [
+          {
+            "node": "12 Normalize and chunk",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "17 Build failure result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "12 Normalize and chunk": {
+      "main": [
+        [
+          {
+            "node": "13 Chunking ok",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "13 Chunking ok": {
+      "main": [
+        [
+          {
+            "node": "14 Build draft request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "17 Build failure result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "14 Build draft request": {
+      "main": [
+        [
+          {
+            "node": "15 Persist draft chunks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "15 Persist draft chunks": {
+      "main": [
+        [
+          {
+            "node": "16 Build ingest result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "16 Build ingest result": {
+      "main": [
+        [
+          {
+            "node": "18 Build callback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "17 Build failure result": {
+      "main": [
+        [
+          {
+            "node": "18 Build callback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "18 Build callback": {
+      "main": [
+        [
+          {
+            "node": "19 Persist contract callback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "executionTimeout": 240,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "timezone": "Asia/Ho_Chi_Minh"
+  },
+  "active": false
+}

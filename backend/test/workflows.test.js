@@ -25,6 +25,25 @@ for (const file of fs
       assert.ok(w.nodes.some(n => n.parameters.url?.endsWith("/publish")));
       return;
     }
+    if (w.nodes.some((n) => n.name.endsWith("Persist contract callback"))) {
+      // G1 contract family (HOANG-WF03/04/05): envelope validation, an error
+      // path to the failure result, and a contract-v1 callback with credentials.
+      assert.ok(w.nodes.some(n => n.name === "02 Validate identifiers"));
+      const persist = w.nodes.find(n => n.name.endsWith("Persist contract callback"));
+      assert.ok(persist.parameters.url.endsWith("/api/webhooks/contract-v1"));
+      const failure = w.nodes.find(n => n.name.endsWith("Build failure result"));
+      assert.ok(failure, "thiếu nhánh lỗi");
+      const callback = w.nodes.find(n => n.name.endsWith("Build callback"));
+      assert.ok(w.connections[failure.name].main[0].some(e => e.node === callback.name),
+        "nhánh lỗi phải đi tới callback");
+      const failed = vm.runInNewContext(`(function(){${failure.parameters.jsCode}\n})()`, {
+        $json: { fail: { code: "X_TEST", message: "loi" } },
+        $: () => ({ first: () => ({ json: { env: {} } }) }),
+      }).json;
+      assert.equal(failed.status, "FAILED");
+      assert.equal(failed.error.code, "X_TEST");
+      return;
+    }
     if (!w.connections["09 Generation succeeded"]) {
       assert.ok(w.nodes.some(n => n.name === "14d Inspect image with Gemini"));
       assert.ok(w.connections["14b Image available"].main[1].length);
