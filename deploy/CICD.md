@@ -51,8 +51,12 @@ GitHub → Settings → Deploy keys, không tick write). Config ghi vào
 (`systemctl status commpr-cd-hook`).
 
 GitHub webhook: Settings → Webhooks → Add webhook:
-- Payload URL: `http://<IP-VPS>:9443/ci/webhook` (đặt TLS riêng qua
+- Payload URL: `http://<IP-VPS>:<PORT>/ci/webhook` (đặt TLS riêng qua
   `--tls-cert/--tls-key` hoặc reverse proxy; secret vẫn là lớp chính).
+  Chọn cổng trống: nếu cổng mặc định 9443 đã bị dịch vụ khác chiếm
+  (curl trả lời "Client sent an HTTP request to an HTTPS server" là bị
+  chiếm), chạy lại installer với `--port <cổng khác>` (ví dụ 9455) rồi
+  dùng đúng cổng đó trong firewall và Payload URL.
 - Content type: `application/json`; Secret: giá trị đã lưu ở trên.
 - Events: **Just the push event**.
 - Mở firewall/security group cho cổng đó (hoặc để reverse proxy lo).
