@@ -130,6 +130,14 @@ class PipelineSafety(unittest.TestCase):
             self.assertEqual(manifest["commit"], SHA)
             self.assertEqual(manifest["images"], {s: f"comm-pr-{s}:{SHA}" for s in ["backend", "frontend"]})
 
+    def test_test_db_url_credentials_match_container_env(self):
+        url = pipeline.test_db_url("pg-host")
+        self.assertIn(pipeline.TEST_DB_PASSWORD, url)
+        self.assertIn(pipeline.TEST_DB_USER + ":" + pipeline.TEST_DB_PASSWORD, url)
+        self.assertNotIn("postgres:***@", url, "literal redaction placeholder leaked into credentials")
+        self.assertTrue(url.endswith("/" + pipeline.TEST_DB_NAME))
+        self.assertTrue(url.startswith("postgresql://" + pipeline.TEST_DB_USER + ":"))
+
     def test_run_reports_failure(self):
         with self.assertRaisesRegex(RuntimeError, "Command failed"):
             pipeline.run([sys.executable, "-c", "import sys; sys.exit(3)"])

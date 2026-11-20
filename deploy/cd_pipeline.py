@@ -27,8 +27,15 @@ STATE = STORE / "pipeline-state.json"
 SHA_RE = re.compile(r"[a-f0-9]{40}\Z")
 MIN_FREE = 6 * 1024**3
 MAX_IMAGE_ARCHIVE = 2 * 1024**3
+TEST_DB_USER = "postgres"
+TEST_DB_PASSWORD = "ci-test-only"
+TEST_DB_NAME = "comm_pr_ci"
 PYTHON_TESTS = ["deploy/test_vps.py", "deploy/test_cd.py", "deploy/test_cd_hook.py",
                 "deploy/test_migrate_release.py", "deploy/test_facebook_credentials.py"]
+
+
+def test_db_url(database):
+    return "postgresql://%s:%s@%s:5432/%s" % (TEST_DB_USER, TEST_DB_PASSWORD, database, TEST_DB_NAME)
 
 
 def now():
@@ -133,10 +140,11 @@ def backend_tests(source, sha):
     try:
         run(["docker", "network", "create", network])
         run(["docker", "run", "-d", "--name", database, "--network", network,
-             "-e", "POSTGRES_USER=postgres", "-e", "POSTGRES_PASSWORD=ci-test-only",
-             "-e", "POSTGRES_DB=comm_pr_ci", "postgres:16-alpine"])
+             "-e", "POSTGRES_USER=" + TEST_DB_USER, "-e", "POSTGRES_PASSWORD=" + TEST_DB_PASSWORD,
+             "-e", "POSTGRES_DB=" + TEST_DB_NAME, "postgres:16-alpine"])
         for _ in range(60):
-            ready = subprocess.run(["docker", "exec", database, "pg_isready", "-U", "postgres", "-d", "comm_pr_ci"],
+            ready = subprocess.run(["docker", "exec", database, "pg_isready", "-U", TEST_DB_USER,
+                                    "-d", TEST_DB_NAME],
                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             if ready.returncode == 0:
                 break
@@ -149,7 +157,7 @@ def backend_tests(source, sha):
                   "update:{}}); await p.$disconnect();\" && node --test --test-concurrency=1 test/*.test.js")
         run(["docker", "run", "--rm", "--user", "root:0", "--network", network,
              "-e", "RUN_DB_TESTS=true",
-             "-e", "DATABASE_URL=postgresql://postgres:***@" + database + ":5432/comm_pr_ci",
+             "-e", "DATABASE_URL=" + test_db_url(database),
              "-e", "N8N_CALLBACK_SECRET=ci-only-callback-secret-not-a-production-credential",
              "-e", "N8N_BASE_URL=http://127.0.0.1:9", "-e", "COOKIE_SECURE=false", "-e", "NODE_ENV=test",
              "-v", str(source / "backend" / "test") + ":/app/backend/test:ro",
