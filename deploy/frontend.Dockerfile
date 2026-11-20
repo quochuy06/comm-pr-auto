@@ -7,11 +7,6 @@ COPY frontend/ ./
 ENV BACKEND_URL=http://backend:5000
 RUN npm run build -- --webpack
 
-# Lint gate used by the VPS pipeline (--target lint). Skipped by normal builds:
-# the final stage below stays the default build target.
-FROM build AS lint
-RUN npm run lint
-
 FROM node:22-bookworm-slim@sha256:de170b39439eb0e5a3444ad7d60b015614a381e10fecae2e30ec9e735122f38d
 WORKDIR /app
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 HOSTNAME=0.0.0.0 PORT=3000

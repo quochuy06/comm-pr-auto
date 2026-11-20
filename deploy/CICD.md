@@ -1,86 +1,21 @@
 # Tự cập nhật VPS khi main thay đổi
 
-Hệ hiện tại: **webhook trên VPS** — GitHub báo sự kiện merge/push vào main,
-VPS tự fetch, test, build image và deploy. Không dùng GitHub Actions
-(workflow `.github/workflows/vps.yml` đã gỡ; lấy lại từ Git history nếu cần).
-Repository: `quochuy06/comm-pr-auto`.
+Workflow: `.github/workflows/build-push.yml` (hiển thị: `Build va push image`;
+job `Build & push backend` / `Build & push web` build image và đẩy lên GHCR,
+job `Deploy len VPS` chuyển release qua SSH hạn chế vào receiver). Repository: `quochuy06/comm-pr-auto`.
 Production hiện tại: `https://top2lowcode.io.vn`, VPS `160.250.180.238`.
 
-## Luồng webhook (không GitHub Actions)
+## Hành vi
 
-1. Merge/push vào `main` → GitHub gửi `push` event có chữ ký HMAC
-   (`X-Hub-Signature-256`) tới `commpr-cd-hook` (systemd service trên VPS).
-2. Hook chỉ xác thực chữ ký, lọc sự kiện (`refs/heads/main`, không force/xóa,
-   SHA hợp lệ, chống gửi trùng theo delivery id) rồi trả lời 202 ngay và
-   xếp pipeline chạy nền trong systemd unit riêng — GitHub ngắt kết nối
-   không ảnh hưởng deploy.
-3. Pipeline (`commpr-cd-pipe`, `deploy/cd_pipeline.py`):
-   - Fetch `origin/main` vào thư mục tạm; commit phải là tổ tiên của
-     `origin/main`, checkout đúng SHA vừa merge.
-   - **Chặn schema đổi**: fingerprint Prisma phải khớp baseline
-     `/etc/commpr-cd.json`; migration mới phải qua `migrate_release.py`
-     có duyệt trước.
-   - Test: Python deployment safety (unittest như trước) + backend
-     API/DB (node --test trên PostgreSQL ném đi, DB test không đụng
-     production) + lint frontend (stage `lint` trong frontend.Dockerfile).
-   - Build image `comm-pr-backend:<sha>`, `comm-pr-frontend:<sha>` có label
-     revision đúng SHA, đóng gói release (images.tar + manifest.json).
-   - Gọi `commpr-cd deploy <sha>`: **toàn bộ cơ chế cũ giữ nguyên** — khóa
-     tuần tự, chờ job idle, sao lưu PostgreSQL, health check, tự quay lại
-     image cũ nếu lỗi. Không tự restore DB.
-4. Trạng thái: `GET /ci/status` của hook, hoặc
-   `/opt/comm-pr-auto/cd/pipeline-state.json`, `current.json`.
-
-## Cài một lần (bên cạnh install_cicd.py)
-
-Trên máy cá nhân: chuẩn bị gói như mục dưới, hoặc copy trực tiếp
-`deploy/cd_hook.py`, `deploy/cd_pipeline.py`, `deploy/install_cd_hook.py`
-sang VPS. Trên terminal VPS (root):
-
-```bash
-python3 install_cd_hook.py --secret-file /root/webhook-secret.txt \
-    [--repo-url git@github.com:quochuy06/comm-pr-auto.git --git-ssh-key /root/ci-read.key]
-```
-
-Khi không truyền `--secret-file`, installer sinh secret ngẫu nhiên và in ra
-một lần (lưu lại ngay; không đưa vào Git/chat). Repo private thì dùng
-`--repo-url` SSH + `--git-ssh-key` là deploy key **chỉ đọc** (cấp trong
-GitHub → Settings → Deploy keys, không tick write). Config ghi vào
-`/etc/commpr-cd.json` (0600 root): `webhookSecret`, `webhook.host/port`,
-`repoUrl`, `gitSshKey`. Installer bật service `commpr-cd-hook`
-(`systemctl status commpr-cd-hook`).
-
-GitHub webhook: Settings → Webhooks → Add webhook:
-- Payload URL: `http://<IP-VPS>:<PORT>/ci/webhook` (đặt TLS riêng qua
-  `--tls-cert/--tls-key` hoặc reverse proxy; secret vẫn là lớp chính).
-  Chọn cổng trống: nếu cổng mặc định 9443 đã bị dịch vụ khác chiếm
-  (curl trả lời "Client sent an HTTP request to an HTTPS server" là bị
-  chiếm), chạy lại installer với `--port <cổng khác>` (ví dụ 9455) rồi
-  dùng đúng cổng đó trong firewall và Payload URL.
-- Content type: `application/json`; Secret: giá trị đã lưu ở trên.
-- Events: **Just the push event**.
-- Mở firewall/security group cho cổng đó (hoặc để reverse proxy lo).
-
-## Hành vi chung (giữ nguyên từ quy trình cũ)
-
-- Pull request vào main: không deploy (hook chỉ nhận push vào main).
-- VPS giữ nguyên Compose project, PostgreSQL volume, media, cấu hình
-  HTTPS/cookie, Facebook token và n8n database/credentials. Không chạy
-  seed, reset hay import workflow.
-- Source Git không cần được clone sẵn trên VPS; pipeline fetch vào thư mục
-  tạm và dọn sau khi xong. Image mới chứa code mới; thư mục snapshot cũ
-  tiếp tục giữ dữ liệu/runtime.
-- Schema hoặc migration thay đổi: chặn triển khai tự động trước khi đổi
-  dịch vụ. Cần quy trình migration thủ công (`migrate_release.py`) và cập
-  nhật baseline đã duyệt. Không dùng audit fix --force hoặc migrate reset
-  để vượt kiểm tra.
-- Thay đổi file cấu hình runtime/Compose/nginx/receiver/hook hoặc workflow
-  n8n không được tự áp dụng chỉ bằng push. Đây là các cập nhật vận hành riêng.
-- Main được tuần tự hóa (pipeline.lock + deployment.lock) và không hủy một
-  deployment đang chạy.
-- Nếu health lỗi, tự chuyển lại image trước đó. Không tự restore database
-  cũ: việc quay lùi DB có thể làm gửi lại outbox đã gửi thành công. Rollback
-  code không hoàn tác bài/phản hồi Facebook đã gửi.
+- Pull request vào main: chỉ chạy kiểm thử, không lấy SSH secrets hay triển khai.
+- Push/merge main hoặc Run workflow trên main: kiểm thử PostgreSQL rỗng, backend/API, Python deployment tests, frontend lint/build; sau đó GitHub build Docker image và chuyển qua SSH.
+- VPS giữ nguyên Compose project, PostgreSQL volume, media, cấu hình HTTPS/cookie, Facebook token và n8n database/credentials. Không chạy seed, reset hay import workflow.
+- Source Git không cần được clone trên VPS. Image mới chứa code mới; thư mục snapshot cũ tiếp tục giữ dữ liệu/runtime.
+- Schema hoặc migration thay đổi: chặn triển khai tự động trước khi đổi dịch vụ. Cần quy trình migration thủ công và cập nhật baseline đã duyệt. Không dùng audit fix --force hoặc migrate reset để vượt kiểm tra.
+- Thay đổi file cấu hình runtime/Compose/nginx/receiver hoặc workflow n8n không được tự áp dụng chỉ bằng push. Đây là các cập nhật vận hành riêng.
+- Main được tuần tự hóa và không hủy một deployment đang chạy. Receiver có thêm file lock.
+- VPS đợi job/sending hoàn thành tối đa 2 phút, sao lưu PostgreSQL, giữ image cũ rồi cập nhật web/backend. Candidate backend được kiểm tra với worker tắt; chỉ bật lại theo cấu hình cũ khi health đạt.
+- Nếu health lỗi, tự chuyển lại image trước đó. Không tự restore database cũ: việc quay lùi DB có thể làm gửi lại outbox đã gửi thành công. Rollback code không hoàn tác bài/phản hồi Facebook đã gửi.
 
 ## Cài một lần
 
@@ -107,46 +42,36 @@ python3 cicd/install_cicd.py --public-key cicd/ci-deploy.pub
 
 Kết quả cần có `CI/CD RECEIVER READY`. Installer kiểm tra production rồi cài root-owned receiver tại `/usr/local/sbin/commpr-cd`, wrapper `/usr/local/bin/commpr-ci-ssh`, config riêng `/etc/commpr-cd.json` và user `commpr-deploy`. Không restart app/database/n8n.
 
-Lưu ý hệ webhook: pipeline chạy `commpr-cd deploy` trực tiếp trên VPS
-(nội bộ root), **không cần SSH key CI**. User `commpr-deploy` và forced
-command chỉ còn dùng khi muốn deploy thủ công từ máy ngoài qua SSH
-(`upload <SHA>` / `deploy <SHA>`); có thể bỏ qua phần public key nếu không
-dùng. Các nguyên tắc an toàn giữ nguyên: forced command chỉ nhận
-`upload/deploy` + SHA 40 ký tự, không shell/PTY/SFTP.
+Key đăng nhập `commpr-deploy` bị ép qua forced command: chỉ nhận `upload <40-character SHA>` hoặc `deploy <SHA>`. Không được mở shell/PTY/SFTP, forward port hoặc chạy sudo tùy ý. Vì đây là quyền cập nhật code production, giữ private key trong GitHub Secrets và hạn chế người có quyền push main.
 
 ## GitHub Secrets
 
-Không cần. Hệ webhook không dùng GitHub Actions và không lấy SSH key từ
-GitHub. Nếu còn secrets cũ (`VPS_DEPLOY_KEY`, `VPS_KNOWN_HOSTS`), hãy xóa
-đi để thu hồi quyền deploy kiểu cũ.
+Vào Repository → Settings → Secrets and variables → Actions. Hai Repository secrets:
+
+| Secret | Giá trị |
+|---|---|
+| `VPS_DEPLOY_KEY` | Nội dung private key `.local/cicd/id_ed25519`, gồm dòng BEGIN/END; không đưa vào issue/chat |
+| `VPS_KNOWN_HOSTS` | Host key đã xác minh cho VPS; installer ghi bản PUBLIC tại `cicd/VPS_KNOWN_HOSTS.txt` |
+
+Có thể dùng host record từ `~/.ssh/known_hosts` đã được người dùng chấp nhận qua phiên SSH hiện tại. Không tắt StrictHostKeyChecking, không tạo niềm tin bằng ssh-keyscan chưa đối chiếu.
+
+Nếu GitHub CLI đã được cấu hình bởi trợ lý, chỉ kiểm tra tên hai secrets đã có; không cần tạo lại. Không overwrite secret của hệ thống khác cùng tên mà chưa đối soát.
+
+Variables tùy chọn: `VPS_HOST` (mặc định `160.250.180.238`), `VPS_PORT` (mặc định `22`). Environment `production` không đặt required reviewers nếu muốn main tự cập nhật sau test. Không dùng pull_request_target để triển khai.
 
 ## Đưa CI/CD lên Git và chạy lần đầu
 
-Commit/push **toàn bộ file triển khai đã kiểm thử** qua PR: Dockerfiles,
-runtime gate, `cd_hook.py`, `cd_pipeline.py`, `install_cd_hook.py`,
-`test_cd_hook.py` và tài liệu này. Tách commit theo trách nhiệm
-Huy/Bảo đã thống nhất; `KE_HOACH_CUOI_KY.md`, `.local`, `deploy/runtime`,
-env và credentials vẫn bị ignore.
+Chỉ sau khi receiver và Secrets sẵn sàng, commit/push **toàn bộ file triển khai đã kiểm thử**, gồm Dockerfiles/standalone/runtime gate từ lần chuyển VPS, các script/kiểm thử CI/CD và workflow. Tách commit theo trách nhiệm Huy/Bảo đã thống nhất; `KE_HOACH_CUOI_KY.md`, `.local`, `deploy/runtime`, env và credentials vẫn bị ignore.
 
-Cài `install_cd_hook.py` trên VPS và cấu hình GitHub webhook (mục trên) là
-bước vận hành riêng, làm **trước** khi merge vào main. Merge đầu tiên sẽ
-tự chạy pipeline. Theo dõi:
+Push main sẽ tự khởi chạy. Vào Actions → Build va push image để theo dõi. Nếu main có branch protection, merge pull request sau khi các job build/test đạt. Có thể Run workflow trên main để chạy lại mà không tạo commit giả.
 
-```bash
-systemctl status commpr-cd-hook
-curl -s http://127.0.0.1:9443/ci/status
-journalctl -u 'commpr-cd-pipe-*' -n 80 --no-pager
-```
-
-Chỉ báo CI/CD đã hoạt động sau khi pipeline xanh, log có `DEPLOYED <SHA>`
-và website/login/ảnh hoạt động. Cấu hình webhook hay file code đã viết chưa
-phải bằng chứng deployment thành công.
+Chỉ báo CI/CD đã hoạt động sau khi job verify/deploy đều xanh, log có `DEPLOYED <SHA>` và website/login/ảnh hoạt động. Secret đã cấu hình hoặc file workflow đã viết chưa phải bằng chứng deployment thành công.
 
 ## Sau này cập nhật code
 
 1. Sửa và test local. Không bật backend/n8n local với dữ liệu production cùng lúc VPS đang xử lý Facebook.
 2. Push nhánh tính năng/PR để test. Merge main khi đạt.
-3. VPS tự fetch, test, build image và restart web/backend. Có thể gián đoạn ngắn khi thay container; đây không phải blue-green zero-downtime.
+3. Actions build trên GitHub; VPS chỉ load image và restart web/backend. Có thể gián đoạn ngắn khi thay container; đây không phải blue-green zero-downtime.
 4. PostgreSQL/media/token/n8n ở VPS không bị thay bằng snapshot local cũ.
 
 Nếu backend bắt đầu dùng biến môi trường mới, cập nhật cấu hình production thủ công trước. Với schema/n8n/deploy config, báo thay đổi cụ thể để làm bước vận hành riêng.
@@ -160,22 +85,17 @@ df -h /
 
 `current.json` chỉ chứa SHA/image/đường dẫn backup, không chứa credential. Backup riêng ở `/opt/comm-pr-auto/cd/backups/`, upload ở `cd/incoming/`. Receiver yêu cầu tối thiểu 6 GiB trống trước upload. Gói upload thành công được xóa sau khi deploy; image rollback và DB dump giữ lại, cần chính sách sao lưu ra ngoài máy và dọn bản cũ có kiểm soát.
 
-Nếu deploy lỗi, dùng SHA 12 ký tự đầu trong trạng thái pipeline:
+Nếu deploy lỗi, dùng SHA 12 ký tự đầu trong Actions:
 
 ```bash
-journalctl -u commpr-cd-pipe-12_KY_TU_DAU_SHA -n 80 --no-pager
+journalctl -u commpr-cd-12_KY_TU_DAU_SHA -n 80 --no-pager
 ```
 
 Không dùng docker prune toàn máy hoặc down -v để xử lý lỗi. Nếu không rollback được, giữ nguyên DB và kiểm tra image/health thủ công. Không bật local để thay thế khi chưa dừng worker VPS và đối soát dữ liệu phát sinh mới.
 
 ## Thu hồi quyền CI
 
-Xóa webhook trong GitHub (Settings → Webhooks), dừng và disable service:
-`systemctl disable --now commpr-cd-hook`. Nếu còn hệ SSH cũ, xóa Repository
-Secret `VPS_DEPLOY_KEY` và bỏ public key trong
-`/home/commpr-deploy/.ssh/authorized_keys`. Web đang chạy không phụ thuộc
-vào webhook hay SSH key CI. Không xóa runtime, PostgreSQL volume hoặc
-n8n-data.
+Xóa Repository Secret `VPS_DEPLOY_KEY` và bỏ public key trong `/home/commpr-deploy/.ssh/authorized_keys`. Web đang chạy không phụ thuộc vào SSH key CI. Không xóa runtime, PostgreSQL volume hoặc n8n-data.
 
 ## Cập nhật token Facebook riêng trên VPS
 
