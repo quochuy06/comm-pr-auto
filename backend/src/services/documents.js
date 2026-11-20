@@ -48,7 +48,7 @@ export function validateUpload(bytes, filename) {
   return { type, ...TYPES[type], filename: name };
 }
 
-async function extractText(bytes, type) {
+export async function extractText(bytes, type) {
   if (type === "txt") return bytes.toString("utf8");
   if (type === "docx") {
     const { value } = await mammoth.extractRawText({ buffer: bytes });
