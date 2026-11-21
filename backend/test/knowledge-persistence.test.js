@@ -100,6 +100,16 @@ test("FAQ persistence: roles, Page isolation, pagination and approved-only retri
     assert.equal((await request(`${base}/archive`, "POST", {expectedVersion:current+1}, "EDITOR")).status, 403);
     assert.equal((await request(`${base}/archive`, "POST", {expectedVersion:current+1}, "REVIEWER")).status, 200);
     assert.equal((await request(`${base}/versions`, "POST", {expectedVersion:current+1,title:marker,question:"?",answer:"!"})).status, 409);
+    // Bỏ lưu trữ: khôi phục nguồn hoạt động từ phiên bản ĐÃ DUYỆT trước đó.
+    assert.equal((await request(`${base}/restore`, "POST", {expectedVersion:current+1}, "EDITOR")).status, 403);
+    assert.equal((await request(`${base}/restore`, "POST", {expectedVersion:current+1}, "REVIEWER")).status, 200);
+    state = (await request(base)).body.data;
+    assert.equal(state.archivedAt, null);
+    assert.equal(state.activeVersionId, active);
+    assert.equal((await request(`${base}/restore`, "POST", {expectedVersion:current+1}, "REVIEWER")).status, 409);
+    // Trả tài liệu lifecycle về trạng thái lưu trữ để các ranh giới truy vấn
+    // bên dưới không bị lẫn nguồn của tài liệu này.
+    assert.equal((await request(`${base}/archive`, "POST", {expectedVersion:current+1}, "REVIEWER")).status, 200);
     // Retrieval boundaries for inactive approval fixtures.
 
     const version = detail.body.data.versions[0];

@@ -30,6 +30,7 @@ router.post("/faq/preview", roles("ADMIN", "EDITOR"), (req, res) => {
 for (const [path, action, allowed] of [
   ["versions", "edit", ["ADMIN", "EDITOR"]], ["submit", "submit", ["ADMIN", "EDITOR"]],
   ["review", "review", ["ADMIN", "REVIEWER"]], ["archive", "archive", ["ADMIN", "REVIEWER"]],
+  ["restore", "restore", ["ADMIN", "REVIEWER"]],
 ]) router.post(`/documents/:id/${path}`, roles(...allowed), async (req, res) => {
   res.json({ success: true, data: await transitionKnowledge(prisma, knowledgePage(req.query), req.params.id, action, req.body, req.user.email) });
 });
