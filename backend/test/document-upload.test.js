@@ -12,6 +12,7 @@ import {
   chunkText,
   uploadDir,
 } from "../src/services/documents.js";
+import { knowledgeScope } from "../src/services/knowledge.js";
 
 const skip = process.env.RUN_DB_TESTS !== "true";
 const fixtures = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures");
@@ -33,6 +34,28 @@ test("detectUploadType/validateUpload: đúng loại, giới hạn, chặn sai �
   }
   assert.throws(() => validateUpload(Buffer.alloc(5 * 1024 * 1024 + 1, 97), "big.txt"), (e) => e.status === 400);
   assert.throws(() => validateUpload(Buffer.from("MZ...."), "virus.exe"), (e) => e.status === 400);
+});
+
+test("knowledgeScope: upload/hỏi đáp cùng phạm vi kho tri thức", () => {
+  const keys = ["FACEBOOK_PAGE_ID", "FACEBOOK_PAGE_ACCESS_TOKEN", "FACEBOOK_GRAPH_API_VERSION"];
+  const saved = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
+  try {
+    // Ép chưa cấu hình (vượt cả .local/facebook.env) → fallback "default".
+    for (const k of keys) process.env[k] = "";
+    assert.equal(knowledgeScope(), "default");
+    // Đã cấu hình → cùng Page với danh sách kho tri thức; sai Page bị chặn.
+    process.env.FACEBOOK_PAGE_ID = "123456789";
+    process.env.FACEBOOK_PAGE_ACCESS_TOKEN = "token-test";
+    process.env.FACEBOOK_GRAPH_API_VERSION = "v23.0";
+    assert.equal(knowledgeScope(), "123456789");
+    assert.equal(knowledgeScope({ pageId: "123456789" }), "123456789");
+    assert.throws(() => knowledgeScope({ pageId: "khac" }), (e) => e.status === 404);
+  } finally {
+    for (const k of keys) {
+      if (saved[k] === undefined) delete process.env[k];
+      else process.env[k] = saved[k];
+    }
+  }
 });
 
 test("chunkText: tách đoạn có thứ tự và locator", () => {

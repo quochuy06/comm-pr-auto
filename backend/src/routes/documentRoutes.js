@@ -4,6 +4,7 @@ import prisma from "../prisma.js";
 import { HttpError } from "../lib/errors.js";
 import { roles } from "../middleware/auth.js";
 import { ingestUpload, getUpload, listUploads } from "../services/documents.js";
+import { knowledgeScope } from "../services/knowledge.js";
 
 // HOANG-API02: upload PDF/DOCX/TXT (raw body + filename trong query), xem danh
 // sách/chi tiết tài liệu đã nạp. Không có endpoint "duyệt" ở đây — vòng đời
@@ -22,6 +23,7 @@ router.post(
       success: true,
       data: await ingestUpload(prisma, req.body, {
         filename: req.query.filename,
+        pageId: knowledgeScope(req.query),
         createdBy: req.user.id,
       }),
     });

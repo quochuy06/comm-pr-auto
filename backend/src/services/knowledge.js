@@ -12,6 +12,18 @@ export function knowledgePage(query = {}) {
   return pageId;
 }
 
+// Phạm vi cho upload và truy vấn trả lời: cùng Page với knowledgePage, nhưng
+// fallback "default" khi chưa cấu hình Facebook (local/test) — để tài liệu
+// upload LUÔN cùng phạm vi với danh sách kho tri thức và bộ truy xuất.
+export function knowledgeScope(query = {}) {
+  try {
+    return knowledgePage(query);
+  } catch (e) {
+    if (e instanceof HttpError && e.status === 503) return "default";
+    throw e;
+  }
+}
+
 export async function createFaq(db, pageId, input, actor) {
   const { draft, chunks } = previewFaqDraft(input);
   return db.$transaction(async tx => {
