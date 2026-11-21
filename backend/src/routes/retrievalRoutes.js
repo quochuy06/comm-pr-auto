@@ -3,6 +3,7 @@ import prisma from "../prisma.js";
 import { HttpError } from "../lib/errors.js";
 import { roles } from "../middleware/auth.js";
 import { retrieveAnswer, getBrandVoice, updateBrandVoice } from "../services/retrieval.js";
+import { knowledgeScope } from "../services/knowledge.js";
 
 // HOANG-API03: hợp đồng truy xuất/trả lời có nguồn + cấu hình giọng thương hiệu.
 // Không gửi, không sinh nội dung bịa — chỉ trả nguồn và trạng thái đủ/thiếu.
@@ -13,7 +14,7 @@ router.post("/retrieval/answer", async (req, res) => {
     success: true,
     data: await retrieveAnswer(prisma, {
       question: req.body.question,
-      pageId: req.body.pageId ? String(req.body.pageId) : undefined,
+      pageId: req.body.pageId ? String(req.body.pageId) : knowledgeScope(),
     }),
   });
 });
