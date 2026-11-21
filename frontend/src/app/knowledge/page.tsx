@@ -58,7 +58,10 @@ export default function KnowledgePage() {
           <button className="btn" disabled={busy} onClick={()=>void act("review",{decision:"APPROVE"})}>Duyệt phiên bản đã lưu</button>
           <button className="btn secondary" disabled={busy} onClick={()=>void act("review",{decision:"REJECT"})}>Từ chối</button>
         </>}
-        {reviewer && <button className="btn secondary" disabled={busy} onClick={()=>void act("archive")}>Lưu trữ nguồn</button>}
+        {reviewer && <button className="btn secondary" disabled={busy} onClick={() => { if (window.confirm("Lưu trữ nguồn = loại tài liệu khỏi nguồn tri thức (không dùng để trả lời). Tiếp tục?")) void act("archive"); }}>Lưu trữ nguồn (không dùng làm nguồn)</button>}
+      </div>}
+      {selected?.archivedAt && <div className="actions">
+        {reviewer && <button className="btn" disabled={busy} onClick={()=>void act("restore")}>Bỏ lưu trữ — dùng lại làm nguồn</button>}
       </div>}
       {selected && <><h3>Lịch sử và nguồn đã lưu</h3><p className="muted">Gửi duyệt/duyệt áp dụng nội dung đã lưu bên dưới. Thay đổi trong form cần lưu thành phiên bản mới trước.</p>
         {selected.versions.map(v=><article key={v.id} className="card"><strong>v{v.version} · {labels[v.status]}{selected.activeVersionId === v.id ? " · Nguồn đang hoạt động" : ""}</strong>

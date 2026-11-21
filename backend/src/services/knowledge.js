@@ -95,7 +95,8 @@ export async function transitionKnowledge(db, pageId, id, action, input, actor) 
     await tx.$queryRaw`SELECT id FROM "KnowledgeDocument" WHERE id = ${id} AND "pageId" = ${pageId} FOR UPDATE`;
     const doc = await getDocument(tx, pageId, id);
     const latest = doc.versions[0];
-    if (doc.archivedAt || !latest || latest.version !== input.expectedVersion) throw new HttpError(409, "Tài liệu đã thay đổi hoặc lưu trữ. Hãy tải lại; nội dung form được giữ nguyên.");
+    if (!latest || latest.version !== input.expectedVersion || (doc.archivedAt && action !== "restore"))
+      throw new HttpError(409, "Tài liệu đã thay đổi hoặc lưu trữ. Hãy tải lại; nội dung form được giữ nguyên.");
     if (action === "edit") {
       const { expectedVersion, ...body } = input;
       const { draft, chunks } = previewFaqDraft(body);
@@ -109,6 +110,15 @@ export async function transitionKnowledge(db, pageId, id, action, input, actor) 
       if (input.decision === "APPROVE") await tx.knowledgeDocument.update({ where: { id }, data: { activeVersionId: latest.id, title: latest.body.title } });
     } else if (action === "archive") {
       await tx.knowledgeDocument.update({ where: { id }, data: { archivedAt: new Date(), activeVersionId: null } });
+    } else if (action === "restore") {
+      // Bỏ lưu trữ: dùng lại làm nguồn — khôi phục phiên bản ĐÃ DUYỆT gần nhất
+      // làm nguồn hoạt động; không có phiên bản đã duyệt thì chỉ mở khóa.
+      if (!doc.archivedAt) throw new HttpError(409, "Tài liệu chưa được lưu trữ.");
+      const approved = doc.versions.find((v) => v.status === "APPROVED");
+      await tx.knowledgeDocument.update({ where: { id }, data: {
+        archivedAt: null,
+        ...(approved ? { activeVersionId: approved.id } : {}),
+      } });
     } else throw new HttpError(400, "Thao tác không hợp lệ.");
     await audit(tx, actor, `KNOWLEDGE_${action.toUpperCase()}`, id, JSON.stringify({ version: latest.version, decision: input.decision, reason }));
     return getDocument(tx, pageId, id);
