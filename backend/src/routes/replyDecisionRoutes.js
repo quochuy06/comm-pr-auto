@@ -40,7 +40,11 @@ router.post("/reply-decisions", roles("ADMIN", "EDITOR"), async (req, res) => {
 router.post("/reply-decisions/:id/approve", roles("ADMIN", "REVIEWER"), async (req, res) => {
   res.json({
     success: true,
-    data: await reviewReplyDecision(prisma, idOf(req), { approve: true, reviewer: req.user.id }),
+    data: await reviewReplyDecision(prisma, idOf(req), {
+      approve: true,
+      reviewer: req.user.id,
+      expectedUpdatedAt: req.body?.expectedUpdatedAt,
+    }),
   });
 });
 
@@ -50,7 +54,8 @@ router.post("/reply-decisions/:id/reject", roles("ADMIN", "REVIEWER"), async (re
     data: await reviewReplyDecision(prisma, idOf(req), {
       approve: false,
       reviewer: req.user.id,
-      reason: req.body.reason,
+      reason: req.body?.reason,
+      expectedUpdatedAt: req.body?.expectedUpdatedAt,
     }),
   });
 });
@@ -58,7 +63,11 @@ router.post("/reply-decisions/:id/reject", roles("ADMIN", "REVIEWER"), async (re
 router.patch("/reply-decisions/:id", roles("ADMIN", "REVIEWER"), async (req, res) => {
   res.json({
     success: true,
-    data: await editReplyDecision(prisma, idOf(req), { replyText: req.body.replyText, editor: req.user.id }),
+    data: await editReplyDecision(prisma, idOf(req), {
+      replyText: req.body?.replyText,
+      editor: req.user.id,
+      expectedUpdatedAt: req.body?.expectedUpdatedAt,
+    }),
   });
 });
 
