@@ -5,8 +5,20 @@ import { useResource, send, errorMessage } from "@/lib/api";
 import { useAuth } from "@/components/shell";
 import { PageTitle, Notice, Badge, Empty, dateTime } from "@/components/ui";
 import type { Campaign, Post } from "@/lib/types";
-type Idea = { topic: string; targetAudience: string; platform: string; suggestedDate: string; rationale: string };
-type Plan = { id: string; status: string; campaign?: Campaign; result?: { summary: string; items: Idea[] }; createdPosts?: Record<string, string>; job?: { error?: string } };
+const contentKinds = { POST: "Bài viết", IMAGE: "Ảnh", VIDEO: "Video" };
+const knowledgeStatuses = {
+  SUFFICIENT: "Có tri thức đã duyệt phù hợp",
+  INSUFFICIENT: "Thiếu tri thức đã duyệt phù hợp",
+  CONFLICT: "Nguồn tri thức có xung đột",
+};
+type Idea = { topic: string; targetAudience: string; platform: string; suggestedDate: string; rationale: string; contentKind?: keyof typeof contentKinds };
+type PlanResult = {
+  summary: string;
+  items: Idea[];
+  knowledgeStatus?: keyof typeof knowledgeStatuses;
+  groundedSources?: { id: string; version: number }[];
+};
+type Plan = { id: string; status: string; campaign?: Campaign; result?: PlanResult; createdPosts?: Record<string, string>; job?: { error?: string } };
 type Schedule = { id: string; status: string; scheduledAt: string; error?: string; target: string; pageId?: string; externalPostId?: string; permalink?: string; post: Post };
 export default function PlanningPage() {
   const user = useAuth();
@@ -59,11 +71,16 @@ export default function PlanningPage() {
         <div className="row between wrap"><h3>{p.campaign?.name || "Kế hoạch"}</h3><Badge value={p.status} /></div>
         {p.job?.error && <p className="notice error">{p.job.error}</p>}
         <p>{p.result?.summary}</p>
+        {p.result?.knowledgeStatus && <p className="muted">{knowledgeStatuses[p.result.knowledgeStatus]}</p>}
+        {!!p.result?.groundedSources?.length && <details>
+          <summary>Nguồn tri thức tham chiếu ({p.result.groundedSources.length})</summary>
+          <ul>{p.result.groundedSources.map(({ id, version }) => <li key={id}>Phiên bản {version} · {id}</li>)}</ul>
+        </details>}
         {reviewer && p.status === "PENDING_APPROVAL" && <div className="row"><button disabled={busy} className="btn" onClick={() => action(`/artifacts/${p.id}/approve`, "PATCH")}>Duyệt kế hoạch</button><button disabled={busy} className="btn secondary" onClick={() => action(`/artifacts/${p.id}/reject`, "PATCH")}>Từ chối</button></div>}
         {editor && p.status === "FAILED" && <button disabled={busy} className="btn secondary" onClick={() => action(`/artifacts/${p.id}/retry`)}>Thử lại</button>}
         {p.result?.items.map((idea, i) => <div className="comment" key={i}>
-          <strong>{i + 1}. {idea.topic}</strong><p className="muted">{idea.platform} · {idea.suggestedDate} · {idea.targetAudience}</p><p>{idea.rationale}</p>
-          {p.createdPosts?.[i] ? <Link href="/studio" className="btn secondary small">Đã tạo bài — mở Studio</Link> : editor && p.status === "APPROVED" && <button disabled={busy} className="btn secondary small" onClick={() => action(`/artifacts/${p.id}/items/${i}`)}>Tạo bài từ ý tưởng</button>}
+          <strong>{i + 1}. {idea.topic}</strong><p className="muted">{contentKinds[idea.contentKind ?? "POST"]} · {idea.platform} · {idea.suggestedDate} · {idea.targetAudience}</p><p>{idea.rationale}</p>
+          {p.createdPosts?.[i] ? <Link href="/studio" className="btn secondary small">Đã tạo bài — mở Studio</Link> : editor && p.status === "APPROVED" && <button disabled={busy} className="btn secondary small" onClick={() => action(`/artifacts/${p.id}/items/${i}`)}>Tạo bản nháp bài viết</button>}
         </div>)}
       </article>)}
     </section>
