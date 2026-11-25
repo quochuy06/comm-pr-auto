@@ -1,8 +1,9 @@
 "use client";
 import { useState } from "react";
+import Link from "next/link";
 import { MessageSquare, Globe, Send } from "lucide-react";
 import { useResource, send, errorMessage } from "@/lib/api";
-import type { Post } from "@/lib/types";
+import type { Post, PrOutbox } from "@/lib/types";
 import {
   PageTitle,
   Notice,
@@ -13,7 +14,15 @@ import {
 } from "@/components/ui";
 import { useAuth } from "@/components/shell";
 import { FacebookPostControls, FacebookReplyDelivery } from "@/components/facebook";
-function FeedPost({ post, refresh }: { post: Post; refresh: () => void }) {
+function FeedPost({
+  post,
+  refresh,
+  prRows,
+}: {
+  post: Post;
+  refresh: () => void;
+  prRows: PrOutbox[];
+}) {
   const [comment, setComment] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -43,6 +52,29 @@ function FeedPost({ post, refresh }: { post: Post; refresh: () => void }) {
         alt={post.headline || post.topic}
       />
       <FacebookPostControls post={post} refresh={refresh} />
+      {post.status === "PUBLISHED" && (prRows.length > 0 || post.schedule?.target === "FACEBOOK") && (
+        <div className="notice info mt">
+          <strong>Bình luận PR của Page (nội bộ)</strong>
+          {prRows.map((o) => (
+            <div className="comment" key={o.id}>
+              <div className="row wrap">
+                <Badge value={o.status} />
+                <small className="muted">
+                  Mã xuất bản: {o.publicationKey}
+                </small>
+              </div>
+              <p className="prose-content mt">
+                {o.contentSnapshot?.text || "—"}
+              </p>
+              {o.externalId && <p className="hint">Mã bình luận Facebook: {o.externalId}</p>}
+              {o.error && <Notice error={o.error} />}
+            </div>
+          ))}
+          <Link className="btn secondary small mt" href="/studio/pr">
+            Mở trang duyệt nội dung PR
+          </Link>
+        </div>
+      )}
       {post.alerts
         ?.filter((a) => a.publishedAt)
         .map((a) => (
@@ -160,9 +192,15 @@ function FeedPost({ post, refresh }: { post: Post; refresh: () => void }) {
 }
 export default function SimulatorPage() {
   const { data, error, loading, refresh } = useResource<Post[]>("/posts", 5000);
+  const outbox = useResource<PrOutbox[]>("/pr/outbox", 8000);
   const posts =
     data?.filter((p) =>
       ["PUBLISHED", "CRISIS_ALERT"].includes(p.status),
+    ) || [];
+  const prRowsFor = (p: Post) =>
+    outbox.data?.filter(
+      (o) =>
+        o.postId === p.id || (p.schedule ? o.scheduleId === p.schedule.id : false),
     ) || [];
   return (
     <>
@@ -170,10 +208,17 @@ export default function SimulatorPage() {
         title="Feed & bình luận"
         description="Theo dõi bài đã xuất bản, bình luận mô phỏng và bình luận đồng bộ từ Facebook Page."
       />
-      <Notice error={error} />
+      <Notice error={error || outbox.error} />
       <div className="feed stack">
         {posts.length ? (
-          posts.map((p) => <FeedPost key={p.id} post={p} refresh={refresh} />)
+          posts.map((p) => (
+            <FeedPost
+              key={p.id}
+              post={p}
+              refresh={refresh}
+              prRows={prRowsFor(p)}
+            />
+          ))
         ) : (
           <Empty>
             {loading
