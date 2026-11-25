@@ -1,6 +1,7 @@
 import axios from "axios";
 import prisma from "../prisma.js";
 import { HttpError } from "../lib/errors.js";
+import { knowledgeScope } from "./knowledge.js";
 let queue = Promise.resolve();
 const paths = {
   content: "generate-post",
@@ -35,6 +36,7 @@ async function contextFor(job) {
     });
     return {
       mode: job.mode,
+      ...(job.mode === "CONTENT" ? { pageId: knowledgeScope() } : {}),
       headline: job.mode === "CONTENT" ? null : p.headline,
       content: job.mode === "CONTENT" ? null : p.content,
       contentReview: p.contentReview,
