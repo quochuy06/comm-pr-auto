@@ -37,7 +37,11 @@ for (const [path, action, allowed] of [
 // G1 job triggers (HOANG-WF03/04/05): create a CONTRACT_V1 job and dispatch it
 // to the matching n8n webhook. The workflow finalizes via the contract
 // callback; polling here returns the receipt once the job finishes.
-const JOB_WEBHOOKS = { ingest: "ingest-document", check: "check-knowledge", answer: "draft-answer" };
+const JOB_WEBHOOKS = {
+  "knowledge.ingest": "ingest-document",
+  "knowledge.normalize": "check-knowledge",
+  "knowledge.answer": "draft-answer",
+};
 async function launchJob(req, res, kind, build) {
   const pageId = knowledgePage(req.query);
   const { context, entityId } = await build(pageId);
@@ -49,7 +53,7 @@ async function launchJob(req, res, kind, build) {
   });
   let dispatch = null, dispatchError = null;
   try {
-    dispatch = await dispatchContractJob(prisma, job.id, JOB_WEBHOOKS[kind.split(".")[1]] ?? JOB_WEBHOOKS[kind]);
+    dispatch = await dispatchContractJob(prisma, job.id, JOB_WEBHOOKS[kind]);
   } catch (e) {
     dispatchError = e instanceof HttpError ? e.message : "Không gửi được yêu cầu tới workflow.";
   }
