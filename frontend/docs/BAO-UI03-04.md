@@ -18,22 +18,24 @@ Bản đồ trang:
   ui.tsx; trường không rõ giá trị hiển thị "—".
 - Tab "Lịch sử & đối soát": bảng thời điểm tạo, kênh, bản gốc (cắt 100 ký tự),
   trạng thái, người duyệt, thời điểm duyệt, liên kết inbound (inboundId hoặc
-  "—") và cột đối soát gửi luôn hiển thị "CHƯA GỬI" — gửi thật thuộc PHUC-WF06
-  chưa triển khai, không có API gửi/đối soát nên trạng thái gửi chưa được theo
-  dõi; UI không bao giờ tuyên bố đã gửi.
+  "—") và cột đối soát gửi hiển thị "Chưa theo dõi". Theo dõi kết quả gửi
+  thuộc PHUC-WF06.
 
 Ma trận quyền (theo backend PHUC-API03):
 - Xem danh sách/chi tiết: mọi vai trò đã đăng nhập.
 - Sửa reply (PATCH `/reply-decisions/:id`): ADMIN/REVIEWER, chỉ khi PENDING.
-- Duyệt (POST `.../approve`): ADMIN/REVIEWER, chỉ khi PENDING; quyết định
-  NEEDS_HUMAN bị khóa nút duyệt (backend trả 409) — chỉ sửa hoặc từ chối.
+- Duyệt (POST `.../approve`): ADMIN/REVIEWER, chỉ với phản hồi PENDING có
+  nội dung và đủ điều kiện duyệt. NEEDS_HUMAN và SKIPPED có thể sửa hoặc từ chối.
 - Từ chối (POST `.../reject` {reason}): ADMIN/REVIEWER, chỉ khi PENDING, reason
   bắt buộc.
-- EDITOR: chỉ xem; form thao tác bị khóa kèm giải thích.
+- EDITOR: chỉ xem. Thẻ phản hồi giải thích quyền của người duyệt.
 
 Trạng thái giao diện: đang tải ("Đang tải hàng duyệt trả lời…"), rỗng ("Không
 có quyết định phản hồi nào khớp bộ lọc."), lỗi từ API hiển thị qua Notice; thao
-tác thành công hiện thông báo ngắn rồi tải lại danh sách (polling 8 giây).
+tác tải lại danh sách (polling 8 giây). Đổi bộ lọc sẽ tạo lượt tải mới, giúp
+kết quả của bộ lọc trước biến mất ngay. Yêu cầu ghi gửi `expectedUpdatedAt`
+theo phiên bản người duyệt đã xem. Nếu phản hồi thay đổi, người duyệt cần mở
+lại thao tác. Thông báo thành công dựa trên trạng thái API trả về.
 
 ## BAO-UI04 — Nội dung PR & trạng thái gửi (Studio/Feed)
 
@@ -54,14 +56,13 @@ Bản đồ trang `/studio/pr`:
   (+ scheduleId), contentSnapshot (text + version tại thời điểm tạo, "—" nếu
   không có), status (PENDING/SENT/FAILED/UNCERTAIN), externalId, error,
   createdAt. Trạng thái hiển thị đúng dữ liệu lưu trữ; luồng gửi thật
-  (PHUC-WF04/HUY-WF04) chưa triển khai — không có thao tác gửi, không bao giờ
-  tự hiển thị "đã gửi" nếu dữ liệu không ghi vậy.
+  thuộc HUY-WF04. Giao diện thao tác cấu hình, bản nháp và duyệt nội dung.
 
 Feed (`/simulator`): trên post card của bài đã xuất bản, khối "Bình luận PR của
 Page (nội bộ)" liệt kê các bản ghi outbox khớp theo postId/scheduleId của bài
-(status, publicationKey, contentSnapshot.text, externalId, error) kèm liên kết
-"Duyệt riêng tại panel PR" — duyệt cùng bài (compact) hoặc duyệt riêng (panel)
-đều ghi rõ không phải trả lời khách.
+(status, publicationKey, contentSnapshot.text, externalId, error). Bài Facebook
+đã xuất bản có lối vào trang duyệt PR kể cả khi hàng đợi chưa có bản ghi.
+Duyệt gắn trực tiếp với từng bài cần chính sách duyệt và liên kết publication ở backend.
 
 Ma trận quyền (theo backend HUY-API02):
 - Xem config/nội dung/outbox: mọi vai trò đã đăng nhập.
@@ -79,3 +80,9 @@ thông báo ngắn rồi tải lại (polling 8 giây).
 
 - ESLint, `tsc --noEmit` và build production (Next.js/Turbopack) đều pass trước
   mỗi commit.
+- Lượt kiểm tra bổ sung: ESLint, TypeScript, production build và 4 kiểm thử
+  backend PR/hàng duyệt đạt trên PostgreSQL cô lập. Playwright kiểm tra
+  sửa/duyệt/từ chối, lọc hai kênh và nguồn trong vai trò REVIEWER trên desktop,
+  cùng hiển thị hàng đợi và trạng thái PR trên Feed ở mobile 390×844. EDITOR
+  tạo bản nháp PR và chỉ xem hàng duyệt trả lời. ADMIN duyệt bản nháp và lưu
+  cấu hình PR, gồm xử lý HTTP 409 và tải lại phiên bản mới.
