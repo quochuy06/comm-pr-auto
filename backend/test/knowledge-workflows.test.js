@@ -20,6 +20,15 @@ const fixtures = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtur
 const wfDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../n8n/workflows");
 const loadWf = (file) => JSON.parse(readFileSync(path.join(wfDir, file)));
 
+async function removeFixtureUploads(documentIds) {
+  const files = await db.sourceFile.findMany({
+    where: { documentId: { in: documentIds } },
+    select: { filePath: true },
+  });
+  await Promise.all(files.map(({ filePath }) =>
+    rm(path.join(uploadDir, path.basename(filePath)), { force: true })));
+}
+
 function runNode(wf, name, json, refs = {}) {
   const node = wf.nodes.find((n) => n.name === name);
   assert.ok(node, `thiếu node ${name}`);
@@ -261,10 +270,10 @@ test("G1 internal API: extract, save drafts and retrieval steps", { skip }, asyn
     if (server) await new Promise((r) => server.close(r));
     await db.knowledgeChunk.deleteMany({ where: { version: { documentId: { in: documents } } } });
     await db.knowledgeVersion.deleteMany({ where: { documentId: { in: documents } } });
+    await removeFixtureUploads(documents);
     await db.sourceFile.deleteMany({ where: { documentId: { in: documents } } });
     await db.knowledgeDocument.deleteMany({ where: { id: { in: documents } } });
     await db.workflowJob.deleteMany({ where: { entityId: { in: documents } } });
-    await rm(uploadDir, { recursive: true, force: true }).catch(() => {});
     await db.$disconnect();
   }
 });
@@ -351,11 +360,11 @@ test("G1 job triggers: dispatch, polling and contract finalization", { skip }, a
     if (n8nServer) await new Promise((r) => n8nServer.close(r));
     await db.knowledgeChunk.deleteMany({ where: { version: { documentId: { in: documents } } } });
     await db.knowledgeVersion.deleteMany({ where: { documentId: { in: documents } } });
+    await removeFixtureUploads(documents);
     await db.sourceFile.deleteMany({ where: { documentId: { in: documents } } });
     await db.knowledgeDocument.deleteMany({ where: { id: { in: documents } } });
     await db.workflowJob.deleteMany({ where: { entityId: { in: documents } } });
     await db.user.deleteMany({ where: { id: { in: users.map((u) => u.id) } } });
-    await rm(uploadDir, { recursive: true, force: true }).catch(() => {});
     await db.$disconnect();
   }
 });
