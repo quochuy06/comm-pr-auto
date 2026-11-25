@@ -1,6 +1,7 @@
 import axios from "axios";
 import prisma from "../prisma.js";
 import { HttpError } from "../lib/errors.js";
+import { knowledgeScope } from "./knowledge.js";
 let queue = Promise.resolve();
 const paths = {
   content: "generate-post",
@@ -10,6 +11,7 @@ const paths = {
   repurpose: "repurpose-content",
   report: "campaign-report",
 };
+const dispatchTimeouts = { content: 410000, planning: 250000 };
 const models = { content: "post", community: "comment", crisis: "alert", planning: "workflowArtifact", repurpose: "workflowArtifact", report: "workflowArtifact" };
 export async function createJob(db, kind, entityId, mode = ["community", "crisis"].includes(kind) ? "V2" : "CONTENT") {
   await db.workflowJob.updateMany({
@@ -26,6 +28,7 @@ export async function createJob(db, kind, entityId, mode = ["community", "crisis
 async function contextFor(job) {
   if (["planning", "repurpose", "report"].includes(job.kind)) {
     const artifact = await prisma.workflowArtifact.findUniqueOrThrow({ where: { id: job.entityId } });
+    if (job.kind === "planning") return { ...artifact.input, pageId: knowledgeScope() };
     return artifact.input;
   }
   if (job.kind === "content") {
@@ -113,7 +116,7 @@ export function dispatch(job) {
           { jobId: job.id, entityId: job.entityId, context },
           {
             headers: { "x-comm-token": process.env.N8N_CALLBACK_SECRET },
-            timeout: job.kind === "content" ? 410000 : 230000,
+            timeout: dispatchTimeouts[job.kind] ?? 230000,
           },
         );
         await failJob(
