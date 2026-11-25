@@ -29,6 +29,7 @@ function PrConfigCard() {
       <Notice error={actionError || error} message={message} />
       {isAdmin && config ? (
         <form
+          key={`${config.version}:${config.mode}`}
           className="mt"
           onSubmit={async (e) => {
             e.preventDefault();
@@ -53,7 +54,7 @@ function PrConfigCard() {
         >
           <div className="field">
             <label htmlFor="pr-mode">Đổi chế độ PR</label>
-            <select id="pr-mode" name="mode" defaultValue={config.mode}>
+            <select id="pr-mode" name="mode" defaultValue={config.mode} disabled={busy}>
               <option value="OFF">Tắt</option>
               <option value="SEMI_AUTO">Bán tự động</option>
               <option value="AUTO">Tự động</option>
@@ -63,15 +64,15 @@ function PrConfigCard() {
             {busy ? "Đang lưu…" : "Lưu chế độ PR"}
           </button>
           <p className="hint mt">
-            Lưu gửi kèm phiên bản cấu hình hiện tại; nếu người khác vừa thay đổi,
-            máy chủ từ chối (409) và trang tải lại phiên bản mới.
+            Nếu cấu hình vừa được thay đổi, trang sẽ tải lại để bạn kiểm tra
+            trước khi lưu lần nữa.
           </p>
         </form>
-      ) : (
+      ) : !isAdmin ? (
         <p className="hint mt">
           Chỉ quản trị viên được đổi chế độ PR.
         </p>
-      )}
+      ) : null}
     </section>
   );
 }
@@ -96,8 +97,11 @@ function PrContentCard() {
       await send(path, "POST", body);
       setMessage(okMessage);
       refresh();
+      return true;
     } catch (e) {
       setError(errorMessage(e));
+      refresh();
+      return false;
     } finally {
       setBusy(false);
     }
@@ -105,21 +109,19 @@ function PrContentCard() {
   return (
     <section className="card">
       <h2>Nội dung PR của Page</h2>
-      <p className="hint mb">
-        Bình luận PR của Page dưới bài do hệ thống đăng — không phải trả lời
-        khách hàng.
-      </p>
       <Notice error={actionError || error} message={message} />
       {canCreate ? (
         <form
-          onSubmit={(e) => {
+          onSubmit={async (e) => {
             e.preventDefault();
-            const f = new FormData(e.currentTarget);
-            void act(
+            const form = e.currentTarget;
+            const f = new FormData(form);
+            const created = await act(
               "/pr/content",
               { text: f.get("text") },
               "Đã tạo nội dung PR (bản nháp).",
             );
+            if (created) form.reset();
           }}
         >
           <label htmlFor="pr-text">Nội dung PR mới</label>
@@ -155,8 +157,7 @@ function PrContentCard() {
               </div>
               <p className="prose-content mt">{c.text || "—"}</p>
               <p className="hint">
-                Người tạo: {c.createdBy || "—"} · Người duyệt:{" "}
-                {c.reviewedBy || "—"}
+                Người tạo: {c.createdBy || "—"} · Người duyệt: {c.reviewedBy || "—"}
               </p>
               {c.status === "DRAFT" && (
                 <button
@@ -192,12 +193,7 @@ function PrOutboxCard() {
   } = useResource<PrOutbox[]>("/pr/outbox", 8000);
   return (
     <section className="card">
-      <h2>Hàng đợi gửi PR (outbox)</h2>
-      <p className="hint mb">
-        Trạng thái hiển thị đúng dữ liệu lưu trữ trong hàng đợi. Luồng gửi thật
-        (PHUC-WF04/HUY-WF04) chưa triển khai — không có thao tác gửi tại đây và
-        trạng thái chỉ thay đổi khi có hệ thống gửi thật.
-      </p>
+      <h2>Hàng đợi gửi PR</h2>
       <Notice error={error} />
       {outbox?.length ? (
         <div className="table-scroll">
@@ -205,11 +201,11 @@ function PrOutboxCard() {
             <thead>
               <tr>
                 <th>Thời điểm tạo</th>
-                <th>Publication</th>
+                <th>Mã xuất bản</th>
                 <th>Bài đăng</th>
                 <th>Nội dung PR tại thời điểm tạo</th>
                 <th>Trạng thái</th>
-                <th>externalId</th>
+                <th>Mã Facebook</th>
                 <th>Lỗi</th>
               </tr>
             </thead>
@@ -264,7 +260,7 @@ export default function StudioPrPage() {
     <>
       <PageTitle
         title="Bình luận PR của Page (nội bộ)"
-        description="Nội dung PR của Page đặt dưới bài do hệ thống đăng. KHÔNG phải trả lời khách hàng — phản hồi khách ở Hàng đợi trả lời và Feed & bình luận."
+        description="Soạn và duyệt bình luận PR của Page dưới bài do hệ thống đăng."
       >
         <Link className="btn secondary" href="/studio">
           Quay lại Studio

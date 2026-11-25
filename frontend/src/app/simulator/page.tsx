@@ -52,32 +52,26 @@ function FeedPost({
         alt={post.headline || post.topic}
       />
       <FacebookPostControls post={post} refresh={refresh} />
-      {prRows.length > 0 && (
+      {post.status === "PUBLISHED" && (prRows.length > 0 || post.schedule?.target === "FACEBOOK") && (
         <div className="notice info mt">
           <strong>Bình luận PR của Page (nội bộ)</strong>
-          <p className="hint">
-            Nội dung PR của Page dưới bài do hệ thống đăng — không phải trả lời
-            khách. Trạng thái lấy từ hàng đợi gửi nội bộ; luồng gửi thật chưa
-            được bật.
-          </p>
           {prRows.map((o) => (
             <div className="comment" key={o.id}>
               <div className="row wrap">
                 <Badge value={o.status} />
                 <small className="muted">
-                  Mã publication: {o.publicationKey || "—"}
+                  Mã xuất bản: {o.publicationKey}
                 </small>
               </div>
               <p className="prose-content mt">
                 {o.contentSnapshot?.text || "—"}
               </p>
-              <p className="hint">
-                externalId: {o.externalId || "—"} · lỗi: {o.error || "—"}
-              </p>
+              {o.externalId && <p className="hint">Mã bình luận Facebook: {o.externalId}</p>}
+              {o.error && <Notice error={o.error} />}
             </div>
           ))}
           <Link className="btn secondary small mt" href="/studio/pr">
-            Duyệt riêng tại panel PR
+            Mở trang duyệt nội dung PR
           </Link>
         </div>
       )}
