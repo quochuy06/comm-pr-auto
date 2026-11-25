@@ -126,7 +126,11 @@ export default function StudioPage() {
       <PageTitle
         title="Content Studio"
         description="Từ ý tưởng đến bài PR: tạo nội dung, chọn hình ảnh và kiểm tra trước khi đưa lên feed."
-      />
+      >
+        <Link className="btn secondary" href="/studio/pr">
+          Bình luận PR (nội bộ)
+        </Link>
+      </PageTitle>
       <Notice error={error} />
       <div className="grid two">
         <section className="card">
