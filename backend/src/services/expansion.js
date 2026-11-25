@@ -8,12 +8,38 @@ export function dateInput(value, label) {
   return new Date(value);
 }
 export function checkedPlan(result) {
-  if (!Array.isArray(result?.items) || result.items.length < 1 || result.items.length > 20) throw new HttpError(400, "Kế hoạch cần 1–20 ý tưởng.");
-  return { summary: text(result.summary, "Tóm tắt", 3000), items: result.items.map(x => ({
-    topic: text(x.topic, "Chủ đề", 1500), targetAudience: text(x.targetAudience, "Đối tượng", 500),
-    tone: text(x.tone, "Giọng điệu", 200), platform: choice(x.platform, ["Facebook", "LinkedIn", "X"], "Nền tảng"),
-    suggestedDate: text(x.suggestedDate, "Ngày đề xuất", 100), rationale: text(x.rationale, "Lý do", 1000),
-  })) };
+  const { items, summary, groundedSources, knowledgeStatus } = result ?? {};
+  if (!Array.isArray(items) || items.length < 1 || items.length > 20)
+    throw new HttpError(400, "Kế hoạch cần 1–20 ý tưởng.");
+  const plan = {
+    summary: text(summary, "Tóm tắt", 3000),
+    items: items.map(item => {
+      if (!item || typeof item !== "object" || Array.isArray(item))
+        throw new HttpError(400, "Ý tưởng không hợp lệ.");
+      return {
+        topic: text(item.topic, "Chủ đề", 1500),
+        targetAudience: text(item.targetAudience, "Đối tượng", 500),
+        tone: text(item.tone, "Giọng điệu", 200),
+        platform: choice(item.platform, ["Facebook", "LinkedIn", "X"], "Nền tảng"),
+        suggestedDate: text(item.suggestedDate, "Ngày đề xuất", 100),
+        rationale: text(item.rationale, "Lý do", 1000),
+        contentKind: choice(item.contentKind ?? "POST", ["POST", "IMAGE", "VIDEO"], "Loại nội dung"),
+      };
+    }),
+    requiresHuman: true,
+  };
+  if (groundedSources != null) {
+    if (!Array.isArray(groundedSources) || groundedSources.length > 20)
+      throw new HttpError(400, "Nguồn tri thức không hợp lệ.");
+    plan.groundedSources = groundedSources.map(source => {
+      if (!Number.isInteger(source?.version) || source.version < 1)
+        throw new HttpError(400, "Phiên bản nguồn tri thức không hợp lệ.");
+      return { id: text(source.id, "ID nguồn tri thức", 128), version: source.version };
+    });
+  }
+  if (knowledgeStatus != null)
+    plan.knowledgeStatus = choice(knowledgeStatus, ["SUFFICIENT", "INSUFFICIENT", "CONFLICT"], "Trạng thái tri thức");
+  return plan;
 }
 export function checkedReview(review) {
   if (!review || typeof review.safe !== "boolean" || typeof review.grounded !== "boolean") throw new HttpError(400, "Thiếu đánh giá độc lập.");

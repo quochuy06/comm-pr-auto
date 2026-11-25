@@ -21,6 +21,64 @@ for (const file of fs
       if (n.type === "n8n-nodes-base.httpRequest")
         assert.ok(n.credentials?.httpHeaderAuth);
     }
+    if (file === "huy-01-planning.json") {
+      // Drive the nodes with n8n-shaped inputs to exercise the decision points.
+      const run = (name, input, previous = {}) => {
+        const { jsCode } = w.nodes.find(node => node.name === name).parameters;
+        const { json } = vm.runInNewContext(`(function(){${jsCode}})()`, {
+          $json: input,
+          $: node => ({ first: () => ({ json: previous[node] }) }),
+        });
+        return JSON.parse(JSON.stringify(json));
+      };
+      const envelope = { jobId: "j", entityId: "e", kind: "planning" };
+      const invalid = run("03a Validate planning input", { ...envelope, context: { brief: " ", count: 21 } });
+      assert.equal(invalid.inputValid, false);
+      assert.match(invalid.error, /brief.*count/);
+      assert.equal(w.connections["03b Planning input valid"].main[1][0].node, "15 Build authenticated callback");
+      assert.equal(run("15 Build authenticated callback", invalid).ok, false);
+
+      const context = { brief: "Cà phê rang", count: 1, pageId: "123456", campaign: { name: "Mùa hè", description: "x".repeat(1000) } };
+      const input = { ...envelope, context, contextText: JSON.stringify(context) };
+      assert.equal(run("03a Validate planning input", input).inputValid, true);
+      const prepared = run("03c Build knowledge request", input);
+      assert.equal(prepared.knowledgeRequest.pageId, "123456");
+      assert.ok(prepared.knowledgeRequest.question.startsWith("Cà phê rang"));
+      assert.equal(prepared.knowledgeRequest.question.length, 1000);
+
+      const source = { id: "v1", version: 1, title: "Thương hiệu", excerpt: "Cà phê rang tại Đà Nẵng." };
+      const lookup = { "03c Build knowledge request": prepared };
+      const failedLookup = run("03e Merge knowledge context", { error: { status: 503 } }, lookup);
+      assert.deepEqual(failedLookup.knowledge, { knowledgeStatus: "INSUFFICIENT", sources: [], brandVoice: null });
+      const malformed = run("03e Merge knowledge context", {
+        success: true, data: { status: "SUFFICIENT", sources: [{ id: "v1" }] },
+      }, lookup);
+      assert.equal(malformed.knowledge.knowledgeStatus, "INSUFFICIENT");
+      const approved = run("03e Merge knowledge context", {
+        success: true, data: { status: "SUFFICIENT", sources: [null, source], brandVoice: { tone: "ấm áp" } },
+      }, lookup);
+      const prompt = run("04 Build generation prompt", approved).requestBody.contents[0].parts[0].text;
+      assert.match(prompt, /ấm áp/);
+      assert.match(prompt, /Cà phê rang tại Đà Nẵng/);
+      const modelResult = { summary: "Kế hoạch", items: [{ topic: "Hậu trường rang", targetAudience: "Sinh viên", tone: "Gần gũi", contentKind: "VIDEO", platform: "Facebook", suggestedDate: "Tuần tới", rationale: "Hợp brief" }] };
+      const check = result => run("08 Validate generated fields", { ...approved, result });
+      assert.equal(check({ ...modelResult, items: [null] }).ok, false);
+      assert.equal(check({ ...modelResult, items: [] }).ok, false);
+      assert.equal(check({ ...modelResult, items: [{ ...modelResult.items[0], contentKind: "GIF" }] }).ok, false);
+      const checked = check(modelResult);
+      assert.equal(checked.ok, true);
+      assert.match(run("10 Build independent review", checked).requestBody.contents[0].parts[0].text, /Đà Nẵng/);
+      const reviewed = run("12 Validate reviewer response", {
+        candidates: [{ content: { parts: [{ text: JSON.stringify({ safe: true, grounded: true, risk: "LOW", reason: "Có nguồn" }) }] } }],
+      }, { "08 Validate generated fields": checked });
+      const deliver = state => run("14 Prepare deliverable", run("13 Apply review decision", state)).result;
+      const result = deliver(reviewed);
+      assert.equal(result.requiresHuman, true);
+      assert.equal(result.autoEligible, undefined);
+      assert.deepEqual(result.groundedSources, [{ id: "v1", version: 1 }]);
+      assert.equal(result.knowledgeStatus, "SUFFICIENT");
+      assert.equal(deliver({ ...reviewed, knowledge: failedLookup.knowledge }).review.grounded, false);
+    }
     if (w.nodes.some(n => n.name === "08 Publish atomically")) {
       assert.ok(w.nodes.some(n => n.parameters.url?.endsWith("/publish")));
       return;

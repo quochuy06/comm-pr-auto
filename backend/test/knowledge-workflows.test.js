@@ -294,6 +294,7 @@ test("G1 internal API: extract, save drafts and retrieval steps", { skip }, asyn
     await removeFixtureUploads(documents);
     await db.knowledgeChunk.deleteMany({ where: { version: { documentId: { in: documents } } } });
     await db.knowledgeVersion.deleteMany({ where: { documentId: { in: documents } } });
+    await removeFixtureUploads(documents);
     await db.sourceFile.deleteMany({ where: { documentId: { in: documents } } });
     await db.knowledgeDocument.deleteMany({ where: { id: { in: documents } } });
     await db.workflowJob.deleteMany({ where: { entityId: { in: documents } } });
@@ -407,6 +408,7 @@ test("G1 job triggers: dispatch, polling and contract finalization", { skip }, a
     await removeFixtureUploads(documents);
     await db.knowledgeChunk.deleteMany({ where: { version: { documentId: { in: documents } } } });
     await db.knowledgeVersion.deleteMany({ where: { documentId: { in: documents } } });
+    await removeFixtureUploads(documents);
     await db.sourceFile.deleteMany({ where: { documentId: { in: documents } } });
     await db.knowledgeDocument.deleteMany({ where: { id: { in: documents } } });
     await db.workflowJob.deleteMany({ where: { id: { in: jobs } } });
