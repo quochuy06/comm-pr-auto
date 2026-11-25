@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useResource, send, errorMessage } from "@/lib/api";
-import type { ReplyDecision, ReplySourceSnapshot } from "@/lib/types";
+import type { ReplyDecision, ReplyReviewStatus, ReplySourceSnapshot } from "@/lib/types";
 import {
   PageTitle,
   Notice,
@@ -36,27 +36,37 @@ function DecisionCard({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
-  const [editing, setEditing] = useState(false);
-  const [rejecting, setRejecting] = useState(false);
+  const [draft, setDraft] = useState<{ kind: "edit" | "reject"; version: string } | null>(null);
   const actionable = d.status === "PENDING";
+  const version = d.updatedAt ?? d.createdAt;
+  const activeDraft = canReview && actionable && draft?.version === version ? draft : null;
+  const editing = activeDraft?.kind === "edit";
+  const rejecting = activeDraft?.kind === "reject";
   async function act(
     path: string,
     method: string,
-    body: unknown = {},
+    body: Record<string, unknown>,
+    expectedStatus: ReplyReviewStatus,
     okMessage: string,
   ) {
     setBusy(true);
     setError("");
     setMessage("");
     try {
-      await send(path, method, body);
+      const updated = await send<ReplyDecision>(path, method, {
+        ...body,
+        expectedUpdatedAt: d.updatedAt ? activeDraft?.version ?? d.updatedAt : undefined,
+      });
+      if (updated.status !== expectedStatus) {
+        setError("Quyết định này đã được xử lý. Danh sách đang được cập nhật.");
+        return;
+      }
       setMessage(okMessage);
-      setEditing(false);
-      setRejecting(false);
-      refresh();
+      setDraft(null);
     } catch (e) {
       setError(errorMessage(e));
     } finally {
+      refresh();
       setBusy(false);
     }
   }
@@ -95,6 +105,7 @@ function DecisionCard({
                   `/reply-decisions/${d.id}`,
                   "PATCH",
                   { replyText: f.get("replyText") },
+                  "PENDING",
                   "Đã lưu nội dung reply.",
                 );
               }}
@@ -117,7 +128,7 @@ function DecisionCard({
                   type="button"
                   className="btn secondary small"
                   disabled={busy}
-                  onClick={() => setEditing(false)}
+                  onClick={() => setDraft(null)}
                 >
                   Hủy
                 </button>
@@ -129,25 +140,24 @@ function DecisionCard({
         </div>
       </div>
       <Notice error={error} message={message} />
-      {!editing && !rejecting && (
+      {canReview && actionable && !editing && !rejecting && (
         <div className="row wrap mt">
           <button
             className="btn secondary small"
-            disabled={!canReview || !actionable || busy}
-            onClick={() => setEditing(true)}
+            disabled={busy}
+            onClick={() => setDraft({ kind: "edit", version })}
           >
             Sửa reply
           </button>
           <button
             className="btn small"
-            disabled={
-              !canReview || !actionable || busy || d.decision === "NEEDS_HUMAN"
-            }
+            disabled={busy || !d.replyText || ["NEEDS_HUMAN", "SKIPPED"].includes(d.decision)}
             onClick={() =>
               void act(
                 `/reply-decisions/${d.id}/approve`,
                 "POST",
                 {},
+                "APPROVED",
                 "Đã duyệt quyết định phản hồi.",
               )
             }
@@ -156,8 +166,8 @@ function DecisionCard({
           </button>
           <button
             className="btn danger small"
-            disabled={!canReview || !actionable || busy}
-            onClick={() => setRejecting(true)}
+            disabled={busy}
+            onClick={() => setDraft({ kind: "reject", version })}
           >
             Từ chối
           </button>
@@ -173,6 +183,7 @@ function DecisionCard({
               `/reply-decisions/${d.id}/reject`,
               "POST",
               { reason: f.get("reason") },
+              "REJECTED",
               "Đã từ chối quyết định phản hồi.",
             );
           }}
@@ -194,7 +205,7 @@ function DecisionCard({
               type="button"
               className="btn secondary small"
               disabled={busy}
-              onClick={() => setRejecting(false)}
+              onClick={() => setDraft(null)}
             >
               Hủy
             </button>
@@ -213,6 +224,9 @@ function DecisionCard({
           chuyển duyệt, chỉ sửa hoặc từ chối.
         </p>
       )}
+      {canReview && actionable && draft && draft.version !== version && (
+        <p className="hint mt">Nội dung đã thay đổi. Hãy mở lại thao tác để xem phiên bản mới.</p>
+      )}
     </article>
   );
 }
@@ -220,24 +234,16 @@ export default function RepliesPage() {
   const [tab, setTab] = useState<"queue" | "history">("queue");
   const [channel, setChannel] = useState("");
   const [status, setStatus] = useState("");
-  const user = useAuth();
-  const canReview = user?.role === "ADMIN" || user?.role === "REVIEWER";
   const params = new URLSearchParams();
   if (channel) params.set("channel", channel);
   if (status) params.set("status", status);
   const query = params.toString();
-  const { data, error, loading, refresh } = useResource<ReplyDecision[]>(
-    `/reply-decisions${query ? `?${query}` : ""}`,
-    8000,
-  );
-  const decisions = data || [];
   return (
     <>
       <PageTitle
         title="Hàng duyệt trả lời"
-        description="Phản hồi khách trên Comment và Messenger: bản gốc, reply đề xuất, nguồn tri thức, luật và lý do chuyển duyệt. Gửi thật tới khách thuộc PHUC-WF06 — chưa triển khai."
+        description="Xem nguồn và duyệt phản hồi cho bình luận hoặc tin nhắn Messenger."
       />
-      <Notice error={error} />
       <div className="card mb">
         <div className="row wrap">
           <div className="field">
@@ -270,23 +276,42 @@ export default function RepliesPage() {
       <div className="tabs">
         <button
           className={tab === "queue" ? "active" : ""}
+          aria-pressed={tab === "queue"}
           onClick={() => setTab("queue")}
         >
           Chi tiết & thao tác
         </button>
         <button
           className={tab === "history" ? "active" : ""}
+          aria-pressed={tab === "history"}
           onClick={() => setTab("history")}
         >
           Lịch sử & đối soát
         </button>
       </div>
+      <ReplyDecisionResults key={query} query={query} tab={tab} />
+    </>
+  );
+}
+
+function ReplyDecisionResults({ query, tab }: { query: string; tab: "queue" | "history" }) {
+  const user = useAuth();
+  const canReview = user?.role === "ADMIN" || user?.role === "REVIEWER";
+  const { data, error, loading, refresh } = useResource<ReplyDecision[]>(
+    `/reply-decisions${query ? `?${query}` : ""}`,
+    8000,
+  );
+  if (!data && error) return <Notice error={error} />;
+  const decisions = data || [];
+  return (
+    <>
+      <Notice error={error} />
       {tab === "queue" ? (
         <div className="stack">
           {decisions.length ? (
             decisions.map((d) => (
               <DecisionCard
-                key={d.id + d.status + (d.replyText || "")}
+                key={d.id}
                 decision={d}
                 refresh={refresh}
                 canReview={canReview}
@@ -303,8 +328,7 @@ export default function RepliesPage() {
       ) : (
         <div className="card">
           <p className="hint mb">
-            Đối soát gửi: trạng thái gửi tới khách chưa được theo dõi — luồng gửi
-            thật (PHUC-WF06) chưa triển khai, mọi quyết định hiển thị CHƯA GỬI.
+            Lịch sử ghi nhận kết quả duyệt. Trạng thái gửi tới khách chưa được theo dõi tại đây.
           </p>
           {decisions.length ? (
             <div className="table-scroll">
@@ -341,7 +365,7 @@ export default function RepliesPage() {
                       </td>
                       <td>{d.inboundId || "—"}</td>
                       <td>
-                        <span className="badge warn">CHƯA GỬI</span>
+                        <span className="badge warn">Chưa theo dõi</span>
                       </td>
                     </tr>
                   ))}
