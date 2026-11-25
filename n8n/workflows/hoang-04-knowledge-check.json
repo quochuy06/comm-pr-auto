@@ -338,11 +338,45 @@
     },
     {
       "id": "g1-19",
-      "name": "19 Persist contract callback",
+      "name": "16a Review valid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        0,
+        720
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "16a Review valid",
+              "leftValue": "={{ !$json.fail }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "g1-20",
+      "name": "20 Persist contract callback",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        0,
+        260,
         720
       ],
       "parameters": {
@@ -550,7 +584,25 @@
       "main": [
         [
           {
+            "node": "16a Review valid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "16a Review valid": {
+      "main": [
+        [
+          {
             "node": "18 Build callback",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "17 Build failure result",
             "type": "main",
             "index": 0
           }
@@ -572,7 +624,7 @@
       "main": [
         [
           {
-            "node": "19 Persist contract callback",
+            "node": "20 Persist contract callback",
             "type": "main",
             "index": 0
           }
