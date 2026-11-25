@@ -265,6 +265,7 @@ function buildCheck() {
     "return {json:{env,status:'SUCCEEDED',result:{versionId:env.context.versionId,verdict:previous.result.verdict,proposals:previous.result.proposals,review},sources:refs}};" });
   w.add("17 Build failure result", "code", { jsCode: FAILURE_RESULT });
   w.add("18 Build callback", "code", { jsCode: BUILD_CALLBACK });
+  ifNode(w, "16a Review valid", "={{ !$json.fail }}");
   w.link("01 Receive request", "02 Validate identifiers");
   w.link("02 Validate identifiers", "03 Limit context");
   w.link("03 Limit context", "04 Build check request");
@@ -282,7 +283,9 @@ function buildCheck() {
   w.link("13 Proposals valid", "17 Build failure result", 1);
   w.link("14 Build review prompt", "15 Review with Gemini");
   w.link("15 Review with Gemini", "16 Validate review and build result");
-  w.link("16 Validate review and build result", "18 Build callback");
+  w.link("16 Validate review and build result", "16a Review valid");
+  w.link("16a Review valid", "18 Build callback", 0);
+  w.link("16a Review valid", "17 Build failure result", 1);
   w.link("17 Build failure result", "18 Build callback");
   finish(w, "hoang-04-knowledge-check.json");
 }
@@ -344,12 +347,14 @@ function buildAnswer() {
     "let review=null;try{review=JSON.parse(strip(body));}catch{}" +
     "const valid=review&&typeof review.grounded==='boolean'&&typeof review.reason==='string'&&review.reason.trim()&&review.reason.length<=2000;" +
     "if(!valid)return {json:{env,fail:{code:'ANSWER_DRAFT_FAILED',message:aiFailure($json)||'Bước kiểm tra độc lập trả kết quả không hợp lệ.'}}};" +
+    "if(!review.grounded)return {json:{env,fail:{code:'ANSWER_UNGROUNDED',message:'Câu trả lời chưa có căn cứ trong nguồn trích dẫn.'}}};" +
     "const map=new Map(previous.retrieval.sources.map(s=>[s.id,s]));const cited=previous.result.citedSourceIds;" +
     "const versions=cited.map(id=>({id,version:map.get(id).version}));" +
     "const sources=cited.map(id=>({id,version:map.get(id).version,pageId:env.pageId}));" +
     "return {json:{env,status:'SUCCEEDED',result:{status:'SUFFICIENT',reply:previous.result.reply,sourceVersions:versions,review},sources}};" });
   w.add("19 Build failure result", "code", { jsCode: FAILURE_RESULT });
   w.add("20 Build callback", "code", { jsCode: BUILD_CALLBACK });
+  ifNode(w, "18a Review grounded", "={{ !$json.fail }}");
   w.link("01 Receive request", "02 Validate identifiers");
   w.link("02 Validate identifiers", "03 Limit context");
   w.link("03 Limit context", "04 Build retrieval request");
@@ -370,7 +375,9 @@ function buildAnswer() {
   w.link("15 Citations valid", "19 Build failure result", 1);
   w.link("16 Build answer review", "17 Review with Gemini");
   w.link("17 Review with Gemini", "18 Validate review and build result");
-  w.link("18 Validate review and build result", "20 Build callback");
+  w.link("18 Validate review and build result", "18a Review grounded");
+  w.link("18a Review grounded", "20 Build callback", 0);
+  w.link("18a Review grounded", "19 Build failure result", 1);
   w.link("19 Build failure result", "20 Build callback");
   finish(w, "hoang-05-answer-draft.json");
 }
