@@ -122,6 +122,37 @@ export interface VideoJob {
   createdAt: string;
   updatedAt: string;
 }
+// PHUC-API03: hàng duyệt phản hồi hai kênh (Comment/Messenger)
+export type ReplyChannel = "COMMENT" | "MESSENGER";
+export type ReplyMode = "OFF" | "SEMI_AUTO" | "AUTO";
+export type ReplyDecisionKind =
+  | "PENDING_APPROVAL"
+  | "READY_TO_SEND"
+  | "SKIPPED"
+  | "NEEDS_HUMAN";
+export type ReplyReviewStatus = "PENDING" | "APPROVED" | "REJECTED";
+export interface ReplySourceSnapshot {
+  sources?: { id: string; version: number; pageId?: string }[];
+  pageId?: string;
+}
+export interface ReplyDecision {
+  id: string;
+  pageId: string;
+  channel: ReplyChannel;
+  inboundId: string | null;
+  inboundText: string;
+  mode: ReplyMode;
+  decision: ReplyDecisionKind;
+  ruleId: string | null;
+  replyText: string | null;
+  sourceSnapshot: ReplySourceSnapshot | null;
+  reason: string | null;
+  status: ReplyReviewStatus;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+  createdAt: string;
+  updatedAt?: string;
+}
 export interface Dashboard {
   posts: number;
   campaigns: number;
