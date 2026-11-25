@@ -6,6 +6,24 @@ test("Plan validation rejects missing items and invalid platforms", () => {
   assert.throws(()=>checkedPlan({ items: [], summary: "x" }));
   assert.throws(()=>checkedPlan({ summary: "x", items: [{ topic: "x", platform: "unknown" }] }));
 });
+test("Plan validation accepts content kinds, defaults POST and stores knowledge traceability", () => {
+  const item = { topic: "Chủ đề", targetAudience: "Đối tượng", tone: "Thân thiện", platform: "Facebook", suggestedDate: "Tuần tới", rationale: "Phù hợp chiến dịch" };
+  const base = { summary: "Kế hoạch thử", items: [item] };
+  assert.equal(checkedPlan(base).items[0].contentKind, "POST");
+  for (const kind of ["POST", "IMAGE", "VIDEO"]) assert.equal(checkedPlan({ ...base, items: [{ ...item, contentKind: kind }] }).items[0].contentKind, kind);
+  assert.throws(()=>checkedPlan({ ...base, items: [{ ...item, contentKind: "GIF" }] }));
+  assert.throws(()=>checkedPlan({ ...base, items: [{ ...item, contentKind: 3 }] }));
+  const plan = checkedPlan({ ...base, groundedSources: [{ id: "kv-1", version: 3 }, { id: "kv-2", version: 2 }], knowledgeStatus: "SUFFICIENT" });
+  assert.deepEqual(plan.groundedSources, [{ id: "kv-1", version: 3 }, { id: "kv-2", version: 2 }]);
+  assert.equal(plan.knowledgeStatus, "SUFFICIENT");
+  assert.equal(plan.requiresHuman, true);
+  assert.equal(checkedPlan(base).groundedSources, undefined);
+  assert.throws(()=>checkedPlan({ ...base, groundedSources: [{ id: "kv-1" }] }));
+  assert.throws(()=>checkedPlan({ ...base, groundedSources: [{ id: "kv-1", version: "1" }] }));
+  assert.throws(()=>checkedPlan({ ...base, groundedSources: "kv-1" }));
+  assert.throws(()=>checkedPlan({ ...base, items: [null] }), /Ý tưởng không hợp lệ/);
+  assert.throws(()=>checkedPlan({ ...base, knowledgeStatus: "MAYBE" }));
+});
 test("Scheduled publication is atomic, idempotent, revision-bound and never posts unapproved content", { skip: process.env.RUN_DB_TESTS !== "true" }, async () => {
   const ids = [];
   async function fixture(status="APPROVED", minutes=1) {
