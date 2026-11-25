@@ -153,6 +153,41 @@ export interface ReplyDecision {
   createdAt: string;
   updatedAt?: string;
 }
+// HUY-API02: cấu hình PR, nội dung PR và hàng đợi gửi (outbox) của Page
+export type PrMode = "OFF" | "SEMI_AUTO" | "AUTO";
+export type PrContentStatus = "DRAFT" | "APPROVED" | "ARCHIVED";
+export type PrOutboxStatus = "PENDING" | "SENT" | "FAILED" | "UNCERTAIN";
+export interface PrConfig {
+  id?: string;
+  pageId: string;
+  mode: PrMode;
+  version: number;
+}
+export interface PrContent {
+  id: string;
+  pageId: string;
+  text: string;
+  version: number;
+  status: PrContentStatus;
+  createdBy: string | null;
+  reviewedBy: string | null;
+  createdAt: string;
+  updatedAt?: string;
+}
+export interface PrOutbox {
+  id: string;
+  publicationKey: string;
+  postId: string | null;
+  scheduleId: string | null;
+  pageId: string;
+  contentId: string | null;
+  contentSnapshot: { contentId: string; version: number; text: string } | null;
+  status: PrOutboxStatus;
+  externalId: string | null;
+  error: string | null;
+  createdAt: string;
+  updatedAt?: string;
+}
 export interface Dashboard {
   posts: number;
   campaigns: number;

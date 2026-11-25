@@ -39,6 +39,8 @@ const labels: Record<string, string> = {
   READY_TO_SEND: "Sẵn sàng gửi",
   SKIPPED: "Bỏ qua",
   NEEDS_HUMAN: "Cần người xử lý",
+  SENT: "Đã gửi",
+  ARCHIVED: "Đã lưu trữ",
   VERIFIED: "Đã tải ảnh",
   MANUAL: "Ảnh thủ công",
 };
@@ -46,7 +48,7 @@ export const label = (value: string) => labels[value] || value;
 export function Badge({ value }: { value: string }) {
   return (
     <span
-      className={`badge ${["APPROVED", "SUCCEEDED", "LOW", "POSITIVE", "RESOLVED", "VERIFIED", "DONE", "READY_TO_SEND"].includes(value) ? "good" : ["FAILED", "HIGH", "CRISIS", "NEGATIVE", "REJECTED", "CRISIS_ALERT", "NEEDS_HUMAN"].includes(value) ? "danger" : ""}`}
+      className={`badge ${["APPROVED", "SUCCEEDED", "LOW", "POSITIVE", "RESOLVED", "VERIFIED", "DONE", "READY_TO_SEND", "SENT"].includes(value) ? "good" : ["FAILED", "HIGH", "CRISIS", "NEGATIVE", "REJECTED", "CRISIS_ALERT", "NEEDS_HUMAN"].includes(value) ? "danger" : ""}`}
     >
       {label(value)}
     </span>
