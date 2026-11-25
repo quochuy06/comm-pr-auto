@@ -20,6 +20,15 @@ const fixtures = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtur
 const wfDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../n8n/workflows");
 const loadWf = (file) => JSON.parse(readFileSync(path.join(wfDir, file)));
 
+async function removeFixtureUploads(documentIds) {
+  const files = await db.sourceFile.findMany({
+    where: { documentId: { in: documentIds } },
+    select: { filePath: true },
+  });
+  await Promise.all(files.map(({ filePath }) =>
+    rm(path.join(uploadDir, path.basename(filePath)), { force: true })));
+}
+
 function runNode(wf, name, json, refs = {}) {
   const node = wf.nodes.find((n) => n.name === name);
   assert.ok(node, `thiếu node ${name}`);
@@ -72,6 +81,29 @@ test("G1 node logic: validate identifiers, chunking, citations and failure resul
       { env, retrieval, result: { reply: "ok", citedSourceIds: cited } });
     assert.equal(bad.fail.code, "ANSWER_DRAFT_FAILED");
   }
+
+  const previous = { ...good, env: ingestEnvelope({ kind: "knowledge.answer" }) };
+  const review = (grounded) => runNode(answer, "18 Validate review and build result", {
+    candidates: [{ content: { parts: [{ text: JSON.stringify({ grounded, reason: "Kiểm tra nguồn." }) }] } }],
+  }, { "15 Citations valid": previous });
+  assert.equal(review(true).result.reply, good.result.reply);
+  const ungrounded = review(false);
+  assert.equal(ungrounded.fail.code, "ANSWER_UNGROUNDED");
+  const failureLink = answer.connections["18a Review grounded"].main[1][0].node;
+  const failedReview = runNode(answer, failureLink, ungrounded);
+  const rejected = runNode(answer, "20 Build callback", failedReview);
+  assert.equal(rejected.status, "FAILED");
+  assert.equal(rejected.error.code, "ANSWER_UNGROUNDED");
+  assert.equal(rejected.result, undefined);
+
+  const failedCheck = runNode(check, "16 Validate review and build result", {
+    error: { message: "503 - upstream unavailable" },
+  }, { "13 Proposals valid": { env: ingestEnvelope({ kind: "knowledge.normalize" }) } });
+  const checkFailureLink = check.connections["16a Review valid"].main[1][0].node;
+  const checkFailure = runNode(check, "18 Build callback", runNode(check, checkFailureLink, failedCheck));
+  assert.equal(checkFailure.status, "FAILED");
+  assert.equal(checkFailure.error.code, "CHECK_FAILED");
+  assert.equal(checkFailure.result, undefined);
 
   // Insufficient retrieval answers with a reason and never a reply.
   const insuff = runNode(answer, "09 Build insufficient result", { env, retrieval: { status: "INSUFFICIENT" } });
@@ -259,12 +291,12 @@ test("G1 internal API: extract, save drafts and retrieval steps", { skip }, asyn
     if (savedSecret === undefined) delete process.env.N8N_CALLBACK_SECRET; else process.env.N8N_CALLBACK_SECRET = savedSecret;
     process.env.FACEBOOK_PAGE_ID = oldPage; process.env.FACEBOOK_PAGE_ACCESS_TOKEN = oldToken; process.env.FACEBOOK_GRAPH_API_VERSION = oldVersion;
     if (server) await new Promise((r) => server.close(r));
+    await removeFixtureUploads(documents);
     await db.knowledgeChunk.deleteMany({ where: { version: { documentId: { in: documents } } } });
     await db.knowledgeVersion.deleteMany({ where: { documentId: { in: documents } } });
     await db.sourceFile.deleteMany({ where: { documentId: { in: documents } } });
     await db.knowledgeDocument.deleteMany({ where: { id: { in: documents } } });
     await db.workflowJob.deleteMany({ where: { entityId: { in: documents } } });
-    await rm(uploadDir, { recursive: true, force: true }).catch(() => {});
     await db.$disconnect();
   }
 });
@@ -278,7 +310,7 @@ test("G1 job triggers: dispatch, polling and contract finalization", { skip }, a
   process.env.FACEBOOK_PAGE_ACCESS_TOKEN = "test-only-token";
   process.env.FACEBOOK_GRAPH_API_VERSION = "v23.0";
   process.env.N8N_CALLBACK_SECRET = "test-internal-secret";
-  const users = [], documents = [];
+  const users = [], documents = [], jobs = [];
   let apiServer, n8nServer, captured = null;
   try {
     n8nServer = createServer((req, res) => {
@@ -324,6 +356,7 @@ test("G1 job triggers: dispatch, polling and contract finalization", { skip }, a
 
     const launched = await call("/jobs/ingest", "POST", { documentId: upload.documentId });
     assert.equal(launched.status, 201);
+    jobs.push(launched.body.data.jobId);
     assert.equal(launched.body.data.action, "DISPATCHED");
     assert.equal(launched.body.data.status, "RUNNING");
     assert.equal(captured.url, "/webhook/ingest-document");
@@ -343,19 +376,41 @@ test("G1 job triggers: dispatch, polling and contract finalization", { skip }, a
     const done = await call(`/jobs/${launched.body.data.jobId}`);
     assert.equal(done.body.data.status, "SUCCEEDED");
     assert.equal(done.body.data.receipt.result.versionId, "v-test");
+
+    const version = upload.versions[0];
+    const check = await call("/jobs/check", "POST", { documentId: upload.documentId, versionId: version.id });
+    assert.equal(check.status, 201);
+    jobs.push(check.body.data.jobId);
+    assert.equal(check.body.data.action, "DISPATCHED");
+    assert.equal(check.body.data.status, "RUNNING");
+    assert.equal(captured.url, "/webhook/check-knowledge");
+    assert.equal(captured.envelope.kind, "knowledge.normalize");
+    assert.deepEqual(captured.envelope.context, {
+      documentId: upload.documentId, versionId: version.id, version: version.version,
+    });
+
+    const question = "Quán mở cửa lúc nào?";
+    const answer = await call("/jobs/answer", "POST", { question, channel: "MESSENGER" }, "REVIEWER");
+    assert.equal(answer.status, 201);
+    jobs.push(answer.body.data.jobId);
+    assert.equal(answer.body.data.action, "DISPATCHED");
+    assert.equal(answer.body.data.status, "RUNNING");
+    assert.equal(captured.url, "/webhook/draft-answer");
+    assert.equal(captured.envelope.kind, "knowledge.answer");
+    assert.deepEqual(captured.envelope.context, { question, channel: "MESSENGER", requestId: captured.envelope.entityId });
   } finally {
     if (savedSecret === undefined) delete process.env.N8N_CALLBACK_SECRET; else process.env.N8N_CALLBACK_SECRET = savedSecret;
     if (savedBase === undefined) delete process.env.N8N_BASE_URL; else process.env.N8N_BASE_URL = savedBase;
     process.env.FACEBOOK_PAGE_ID = oldPage; process.env.FACEBOOK_PAGE_ACCESS_TOKEN = oldToken; process.env.FACEBOOK_GRAPH_API_VERSION = oldVersion;
     if (apiServer) await new Promise((r) => apiServer.close(r));
     if (n8nServer) await new Promise((r) => n8nServer.close(r));
+    await removeFixtureUploads(documents);
     await db.knowledgeChunk.deleteMany({ where: { version: { documentId: { in: documents } } } });
     await db.knowledgeVersion.deleteMany({ where: { documentId: { in: documents } } });
     await db.sourceFile.deleteMany({ where: { documentId: { in: documents } } });
     await db.knowledgeDocument.deleteMany({ where: { id: { in: documents } } });
-    await db.workflowJob.deleteMany({ where: { entityId: { in: documents } } });
+    await db.workflowJob.deleteMany({ where: { id: { in: jobs } } });
     await db.user.deleteMany({ where: { id: { in: users.map((u) => u.id) } } });
-    await rm(uploadDir, { recursive: true, force: true }).catch(() => {});
     await db.$disconnect();
   }
 });

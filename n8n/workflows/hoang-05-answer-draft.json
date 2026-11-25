@@ -354,7 +354,7 @@
         480
       ],
       "parameters": {
-        "jsCode": "function aiFailure(r){const e=r&&r.error;if(!e)return null;const m=typeof e==='string'?e:(e.message||'');const code=Number(e.status||e.httpCode||(e.response&&e.response.status)||(/^([0-9]{3})/.exec(m)||[])[1]);if(code===429)return 'Gemini đã chạm hạn mức (HTTP 429). Hãy chờ hạn mức phục hồi rồi thử lại.';if(code===503)return 'Gemini đang quá tải (HTTP 503). Hãy thử lại sau.';if(code===401||code===403)return 'Gemini từ chối xác thực hoặc quyền truy cập. Kiểm tra credential và project.';if(code===404)return 'Model Gemini không khả dụng cho project này. Kiểm tra GEMINI_MODEL.';if(/timeout|timed out/i.test(m)||e.code==='ECONNABORTED')return 'Gemini quá thời gian chờ 60 giây. Hãy thử lại sau.';return 'Không gọi được Gemini. Kiểm tra kết nối và cấu hình dịch vụ.';}const strip=s=>{const t=String.fromCharCode(96);let v=String(s||'').trim();if(v.startsWith(t+t+t))v=v.slice(3);if(v.startsWith('json'))v=v.slice(4);v=v.trim();if(v.endsWith(t+t+t))v=v.slice(0,-3);return v.trim();};const previous=$('15 Citations valid').first().json;const env=previous.env;const parts=($json&&$json.candidates&&$json.candidates[0]&&$json.candidates[0].content&&$json.candidates[0].content.parts)||[];const body=parts.filter(p=>!p.thought).map(p=>p.text||'').join('');let review=null;try{review=JSON.parse(strip(body));}catch{}const valid=review&&typeof review.grounded==='boolean'&&typeof review.reason==='string'&&review.reason.trim()&&review.reason.length<=2000;if(!valid)return {json:{env,fail:{code:'ANSWER_DRAFT_FAILED',message:aiFailure($json)||'Bước kiểm tra độc lập trả kết quả không hợp lệ.'}}};const map=new Map(previous.retrieval.sources.map(s=>[s.id,s]));const cited=previous.result.citedSourceIds;const versions=cited.map(id=>({id,version:map.get(id).version}));const sources=cited.map(id=>({id,version:map.get(id).version,pageId:env.pageId}));return {json:{env,status:'SUCCEEDED',result:{status:'SUFFICIENT',reply:previous.result.reply,sourceVersions:versions,review},sources}};"
+        "jsCode": "function aiFailure(r){const e=r&&r.error;if(!e)return null;const m=typeof e==='string'?e:(e.message||'');const code=Number(e.status||e.httpCode||(e.response&&e.response.status)||(/^([0-9]{3})/.exec(m)||[])[1]);if(code===429)return 'Gemini đã chạm hạn mức (HTTP 429). Hãy chờ hạn mức phục hồi rồi thử lại.';if(code===503)return 'Gemini đang quá tải (HTTP 503). Hãy thử lại sau.';if(code===401||code===403)return 'Gemini từ chối xác thực hoặc quyền truy cập. Kiểm tra credential và project.';if(code===404)return 'Model Gemini không khả dụng cho project này. Kiểm tra GEMINI_MODEL.';if(/timeout|timed out/i.test(m)||e.code==='ECONNABORTED')return 'Gemini quá thời gian chờ 60 giây. Hãy thử lại sau.';return 'Không gọi được Gemini. Kiểm tra kết nối và cấu hình dịch vụ.';}const strip=s=>{const t=String.fromCharCode(96);let v=String(s||'').trim();if(v.startsWith(t+t+t))v=v.slice(3);if(v.startsWith('json'))v=v.slice(4);v=v.trim();if(v.endsWith(t+t+t))v=v.slice(0,-3);return v.trim();};const previous=$('15 Citations valid').first().json;const env=previous.env;const parts=($json&&$json.candidates&&$json.candidates[0]&&$json.candidates[0].content&&$json.candidates[0].content.parts)||[];const body=parts.filter(p=>!p.thought).map(p=>p.text||'').join('');let review=null;try{review=JSON.parse(strip(body));}catch{}const valid=review&&typeof review.grounded==='boolean'&&typeof review.reason==='string'&&review.reason.trim()&&review.reason.length<=2000;if(!valid)return {json:{env,fail:{code:'ANSWER_DRAFT_FAILED',message:aiFailure($json)||'Bước kiểm tra độc lập trả kết quả không hợp lệ.'}}};if(!review.grounded)return {json:{env,fail:{code:'ANSWER_UNGROUNDED',message:'Câu trả lời chưa có căn cứ trong nguồn trích dẫn.'}}};const map=new Map(previous.retrieval.sources.map(s=>[s.id,s]));const cited=previous.result.citedSourceIds;const versions=cited.map(id=>({id,version:map.get(id).version}));const sources=cited.map(id=>({id,version:map.get(id).version,pageId:env.pageId}));return {json:{env,status:'SUCCEEDED',result:{status:'SUFFICIENT',reply:previous.result.reply,sourceVersions:versions,review},sources}};"
       }
     },
     {
@@ -385,11 +385,45 @@
     },
     {
       "id": "g1-21",
-      "name": "21 Persist contract callback",
+      "name": "18a Review grounded",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        520,
+        720
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "18a Review grounded",
+              "leftValue": "={{ !$json.fail }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "g1-22",
+      "name": "22 Persist contract callback",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        520,
+        780,
         720
       ],
       "parameters": {
@@ -626,7 +660,25 @@
       "main": [
         [
           {
+            "node": "18a Review grounded",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "18a Review grounded": {
+      "main": [
+        [
+          {
             "node": "20 Build callback",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "19 Build failure result",
             "type": "main",
             "index": 0
           }
@@ -648,7 +700,7 @@
       "main": [
         [
           {
-            "node": "21 Persist contract callback",
+            "node": "22 Persist contract callback",
             "type": "main",
             "index": 0
           }

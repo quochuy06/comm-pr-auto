@@ -10,6 +10,7 @@ import {
 } from "../services/policy.js";
 import { communityMetadata, crisisMetadata, applyTriage } from "../services/triage.js";
 import { evaluateCrisis } from "../services/crisis.js";
+import { verifyContentSources } from "../services/contentKnowledgeReview.js";
 function validReview(r) {
   return (
     r &&
@@ -141,6 +142,12 @@ export const handleN8nCallback = async (req, res) => {
       update: {},
     });
     if (kind === "content") {
+      // The image callback can only judge the image. The text-stage review is
+      // authoritative for posts generated with WF01 knowledge provenance.
+      if (job.mode !== "CONTENT" && current.contentReview?.knowledgeStatus) {
+        r.review = await verifyContentSources(db, current.contentReview);
+        r.risk = current.risk;
+      }
       const auto = canAutoApprovePost(settings, r, image.imageStatus, visual);
       const changed = await db.post.updateMany({
         where: {
