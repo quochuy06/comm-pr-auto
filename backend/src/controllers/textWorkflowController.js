@@ -1,6 +1,7 @@
 import prisma from "../prisma.js";
 import { HttpError, text, choice, audit } from "../lib/errors.js";
 import { createJob, dispatch, failJob } from "../services/workflows.js";
+import { contentSources, verifyContentSources } from "../services/contentKnowledgeReview.js";
 
 // A text job never approves a post. Only the subsequent image job can evaluate
 // the combined text + image policy; its ID invalidates late text callbacks.
@@ -28,7 +29,9 @@ export async function handleTextCallback(req, res) {
       risk: choice(result.risk, ["LOW", "MEDIUM", "HIGH"], "Rủi ro"),
       contentReview: { safe: r.safe, grounded: r.grounded,
         risk: choice(r.risk, ["LOW", "MEDIUM", "HIGH"], "Rủi ro đánh giá"),
-        reason: text(r.reason, "Lý do", 5000) },
+        reason: text(r.reason, "Lý do", 5000),
+        ...contentSources(result),
+      },
       status: "PENDING_APPROVAL", approvedBy: null,
       imageStatus: "PENDING", imageReviewStatus: "PENDING",
     };
@@ -36,7 +39,11 @@ export async function handleTextCallback(req, res) {
   const imageJob = await prisma.$transaction(async db => {
     const claim = await db.workflowJob.updateMany({ where: { id: jobId, status: { in: ["QUEUED", "RUNNING"] } }, data: { status: "SUCCEEDED" } });
     if (!claim.count) return null;
-    const saved = await db.post.updateMany({ where: { id: entityId, latestJobId: jobId, status: "DRAFT" }, data });
+    const review = await verifyContentSources(db, data.contentReview);
+    const saved = await db.post.updateMany({
+      where: { id: entityId, latestJobId: jobId, status: "DRAFT" },
+      data: { ...data, contentReview: review, reviewReason: review.reason },
+    });
     if (!saved.count) {
       await db.workflowJob.update({ where: { id: jobId }, data: { status: "CANCELLED", error: "Bài đã thay đổi." } });
       return null;

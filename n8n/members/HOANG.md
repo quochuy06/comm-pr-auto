@@ -2,7 +2,7 @@
 
 Đợt mở rộng workflow v2; nhánh `feat/hoang-content-image-v2`.
 
-- `hoang-01-content.json`: 17 node, webhook `generate-post`, soạn và kiểm tra văn bản, callback `content-text`.
+- `hoang-01-content.json`: 20 node, webhook `generate-post`, soạn và kiểm tra văn bản dựa trên tri thức đã duyệt. Callback `content-text` lưu ID và phiên bản nguồn, xem [HOANG-WF01](../../backend/docs/HOANG-WF01.md).
 - `hoang-02-image.json`: 13 node, webhook `generate-image`, tải ảnh, kiểm tra bytes bằng Gemini vision, callback `content`.
 - Callback văn bản lưu bài chờ duyệt, hoàn tất job văn bản rồi tạo một job IMAGE_ONLY trong cùng transaction. Callback lặp/cũ không tạo ảnh thêm.
 - Chỉ callback ảnh mới áp dụng chính sách duyệt tổng hợp. Lỗi ảnh giữ nguyên bài, không tự duyệt. Có thể gọi lại riêng ảnh từ Studio.

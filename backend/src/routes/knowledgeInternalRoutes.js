@@ -1,6 +1,7 @@
 import { Router } from "express";
 import prisma from "../prisma.js";
 import { HttpError } from "../lib/errors.js";
+import { knowledgeScope } from "../services/knowledge.js";
 import {
   documentMeta, extractDocumentText, saveIngestDraft, checkContext, answerContext,
 } from "../services/knowledgeWorkflow.js";
@@ -48,7 +49,7 @@ knowledgeInternal.post("/check-context", async (req, res) => {
 knowledgeInternal.post("/answer-context", async (req, res) => {
   res.json({ success: true, data: await answerContext(prisma, {
     question: req.body.question,
-    pageId: page(req.body.pageId) || "default",
+    pageId: page(req.body.pageId) ?? knowledgeScope(),
   }) });
 });
 

@@ -75,7 +75,7 @@ export async function retrieveAnswer(db, { question, pageId = "default" } = {}) 
 
   // CHỈ chunk thuộc phiên bản đã kích hoạt của tài liệu chưa lưu trữ, đúng Page.
   const documents = await db.knowledgeDocument.findMany({
-    where: { pageId, archivedAt: null, activeVersionId: { not: null } },
+    where: { pageId, archivedAt: null, activeVersion: { status: "APPROVED" } },
     include: {
       activeVersion: { include: { chunks: true } },
     },
