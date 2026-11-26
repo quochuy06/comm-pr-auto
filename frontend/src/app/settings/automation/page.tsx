@@ -73,12 +73,12 @@ function ChannelModesSection() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
-  async function save(channel: Channel, mode: Mode, expectedVersion: number) {
+  async function save(pageId: string, channel: Channel, mode: Mode, expectedVersion: number) {
     setBusy(channel);
     setError("");
     setNotice("");
     try {
-      await send(`/automation/channels/${channel}`, "PATCH", {
+      await send(`/automation/channels/${channel}?pageId=${encodeURIComponent(pageId)}`, "PATCH", {
         mode,
         expectedVersion,
       });
@@ -101,7 +101,7 @@ function ChannelModesSection() {
       <p className="hint">
         Tắt: không tự động hành động. AI soạn chờ duyệt: hệ thống soạn nội dung
         nhưng người duyệt quyết định gửi. Tự gửi: hệ thống tự gửi khi đủ điều
-        kiện an toàn. Luồng chào cố định chạy độc lập với cài đặt này.
+        kiện an toàn. Mẫu chào cố định có cấu hình riêng và hệ thống kiểm tra để tránh trả lời trùng.
       </p>
       <Notice error={error || loadError} message={notice} />
       {!admin ? (
@@ -114,15 +114,21 @@ function ChannelModesSection() {
         <Empty>Chưa tải được cấu hình kênh. Hãy bấm Tải lại.</Empty>
       ) : (
         <>
+          <p className="hint">Page đang áp dụng {data.pageId}</p>
+          <Notice
+            message={data.adviceRuntimeEnabled
+              ? "Xử lý phản hồi tư vấn đang hoạt động."
+              : "Xử lý phản hồi tư vấn đang tắt trên máy chủ. Bạn vẫn có thể lưu cấu hình."}
+          />
           {data.channels.map((ch) => (
             <form
-              key={`${ch.channel}-${ch.version}`}
+              key={`${data.pageId}-${ch.channel}-${ch.version}`}
               onSubmit={(e) => {
                 e.preventDefault();
                 const mode = new FormData(e.currentTarget).get(
                   "mode",
                 ) as Mode;
-                void save(ch.channel, mode, ch.version);
+                void save(data.pageId, ch.channel, mode, ch.version);
               }}
             >
               <fieldset disabled={busy !== ""} style={fieldsetStyle}>
@@ -710,6 +716,78 @@ function GreetingTemplatesSection() {
   );
 }
 
+type BrandVoice = {
+  tone: string;
+  style: string | null;
+  forbidden: string | null;
+  version: number;
+};
+
+function BrandVoiceSection() {
+  const admin = useAuth()?.role === "ADMIN";
+  const { data, loading, error: loadError, refresh } = useResource<BrandVoice>("/retrieval/brand-voice");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+
+  async function save(e: React.FormEvent<HTMLFormElement>, version: number) {
+    e.preventDefault();
+    if (!admin || busy) return;
+    const form = new FormData(e.currentTarget);
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      await send<BrandVoice>("/retrieval/brand-voice", "PUT", {
+        tone: String(form.get("tone") ?? ""),
+        style: String(form.get("style") ?? ""),
+        forbidden: String(form.get("forbidden") ?? ""),
+        version,
+      });
+      setNotice("Đã lưu giọng thương hiệu.");
+      refresh();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="card">
+      <h2>Giọng thương hiệu</h2>
+      <Notice error={error || loadError} message={notice} />
+      {data ? (
+        <form key={data.version} onSubmit={(e) => void save(e, data.version)}>
+          <fieldset disabled={busy || loading || !admin} style={fieldsetStyle}>
+            <div className="field">
+              <label htmlFor="brand-tone">Giọng điệu</label>
+              <input id="brand-tone" name="tone" defaultValue={data.tone} maxLength={200} required />
+            </div>
+            <div className="field">
+              <label htmlFor="brand-style">Cách diễn đạt</label>
+              <textarea id="brand-style" name="style" defaultValue={data.style ?? ""} maxLength={2000} rows={2} />
+            </div>
+            <div className="field">
+              <label htmlFor="brand-forbidden">Từ ngữ hoặc cách diễn đạt cần tránh</label>
+              <textarea id="brand-forbidden" name="forbidden" defaultValue={data.forbidden ?? ""} maxLength={2000} rows={2} />
+            </div>
+            {admin && <button className="btn" type="submit">{busy ? "Đang lưu…" : "Lưu giọng thương hiệu"}</button>}
+          </fieldset>
+        </form>
+      ) : <Empty>{loading ? "Đang tải giọng thương hiệu…" : "Chưa tải được giọng thương hiệu."}</Empty>}
+      <button
+        className="btn secondary small mt"
+        type="button"
+        disabled={busy || loading}
+        onClick={() => { setError(""); setNotice(""); refresh(); }}
+      >
+        Tải lại giọng thương hiệu
+      </button>
+    </section>
+  );
+}
+
 export default function AutomationSettingsPage() {
   return (
     <>
@@ -719,6 +797,7 @@ export default function AutomationSettingsPage() {
       />
       <div className="stack">
         <ChannelModesSection />
+        <BrandVoiceSection />
         <KeywordRulesSection />
         <DryRunSection />
         <GreetingTemplatesSection />
