@@ -24,6 +24,17 @@ function Sources({ snapshot }: { snapshot: ReplySourceSnapshot | null }) {
     </span>
   );
 }
+function SendResult({ decision }: { decision: ReplyDecision }) {
+  if (!decision.sendStatus) return <span className="muted">Chưa có lượt gửi</span>;
+  return (
+    <div>
+      <Badge value={decision.sendStatus === "PENDING" ? "QUEUED" : decision.sendStatus} />
+      {decision.externalReplyId && <p className="hint">Mã phản hồi Facebook {decision.externalReplyId}</p>}
+      {decision.sendError && <p className="hint">{decision.sendError}</p>}
+    </div>
+  );
+}
+
 function DecisionCard({
   decision: d,
   refresh,
@@ -139,6 +150,13 @@ function DecisionCard({
           )}
         </div>
       </div>
+      {d.escalatedAt && <p className="hint mt">Đã chuyển cấp lúc {dateTime(d.escalatedAt)}</p>}
+      {d.sendStatus && (
+        <div className="mt">
+          <strong>Trạng thái gửi</strong>
+          <SendResult decision={d} />
+        </div>
+      )}
       <Notice error={error} message={message} />
       {canReview && actionable && !editing && !rejecting && (
         <div className="row wrap mt">
@@ -328,7 +346,7 @@ function ReplyDecisionResults({ query, tab }: { query: string; tab: "queue" | "h
       ) : (
         <div className="card">
           <p className="hint mb">
-            Lịch sử ghi nhận kết quả duyệt. Trạng thái gửi tới khách chưa được theo dõi tại đây.
+            Các lượt gửi cần đối soát sẽ hiển thị cùng kết quả duyệt.
           </p>
           {decisions.length ? (
             <div className="table-scroll">
@@ -365,7 +383,7 @@ function ReplyDecisionResults({ query, tab }: { query: string; tab: "queue" | "h
                       </td>
                       <td>{d.inboundId || "—"}</td>
                       <td>
-                        <span className="badge warn">Chưa theo dõi</span>
+                        <SendResult decision={d} />
                       </td>
                     </tr>
                   ))}
