@@ -49,7 +49,7 @@ export async function listDocuments(db, pageId, query) {
     if (!cursor) throw new HttpError(400, "Con trỏ không hợp lệ.");
   }
   const items = await db.knowledgeDocument.findMany({
-    where: { pageId, ...(cursor ? { OR: [
+    where: { pageId, deletedAt: null, ...(cursor ? { OR: [
       { createdAt: { lt: cursor.createdAt } },
       { createdAt: cursor.createdAt, id: { lt: cursor.id } },
     ] } : {}) },
@@ -62,7 +62,7 @@ export async function listDocuments(db, pageId, query) {
 }
 
 export async function getDocument(db, pageId, id) {
-  const document = await db.knowledgeDocument.findFirst({ where: { id, pageId },
+  const document = await db.knowledgeDocument.findFirst({ where: { id, pageId, deletedAt: null },
     include: { versions: { orderBy: { version: "desc" }, include: { chunks: true } } } });
   if (!document) throw new HttpError(404, "Không tìm thấy tài liệu.");
   return document;

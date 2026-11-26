@@ -68,7 +68,7 @@ async function launchJob(req, res, kind, build) {
 router.post("/jobs/ingest", roles("ADMIN", "EDITOR"), async (req, res) => {
   await launchJob(req, res, "knowledge.ingest", async (pageId) => {
     const documentId = String(req.body?.documentId || "");
-    const doc = await prisma.knowledgeDocument.findFirst({ where: { id: documentId, pageId }, include: { sourceFile: true } });
+    const doc = await prisma.knowledgeDocument.findFirst({ where: { id: documentId, pageId, deletedAt: null }, include: { sourceFile: true } });
     if (!doc?.sourceFile) throw new HttpError(404, "Tài liệu chưa có tệp nguồn để tiếp nhận.");
     return { context: { documentId }, entityId: documentId };
   });
@@ -78,7 +78,7 @@ router.post("/jobs/check", roles("ADMIN", "EDITOR"), async (req, res) => {
     const documentId = String(req.body?.documentId || "");
     const versionId = String(req.body?.versionId || "");
     const version = await prisma.knowledgeVersion.findFirst({
-      where: { id: versionId, documentId, document: { pageId } },
+      where: { id: versionId, documentId, document: { pageId, deletedAt: null } },
     });
     if (!version) throw new HttpError(404, "Không tìm thấy bản nháp cần kiểm tra.");
     return { context: { documentId, versionId, version: version.version }, entityId: versionId };

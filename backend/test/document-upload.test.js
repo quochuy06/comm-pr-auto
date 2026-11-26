@@ -1,5 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { once } from "node:events";
+import { app } from "../src/app.js";
+import { hashPassword } from "../src/lib/security.js";
 import { readFile, rm } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,6 +13,8 @@ import {
   validateUpload,
   ingestUpload,
   getUpload,
+  deleteUpload,
+  listUploads,
   chunkText,
   uploadDir,
 } from "../src/services/documents.js";
@@ -122,6 +128,85 @@ test("Upload lỗi: PDF ảnh báo thiếu OCR, file hỏng ghi FAILED rõ ràng
   } finally {
     await db.knowledgeDocument.deleteMany({ where: { id: { in: ids } } });
     for (const f of files) await rm(path.join(uploadDir, f), { force: true });
+    await db.$disconnect();
+  }
+});
+
+
+test("DELETE upload retracts the source, checks Page and role, and audits exactly once", { skip }, async () => {
+  const users = [];
+  const pageId = knowledgeScope();
+  const password = "BAO-UI07-fixture-only";
+  const prefix = "delete-fixture-" + randomUUID();
+  let server, upload;
+  try {
+    upload = await ingestUpload(db, Buffer.from(prefix), { filename: "delete.txt", pageId, createdBy: prefix });
+    const versionId = upload.versions[0].id;
+    await db.knowledgeVersion.update({
+      where: { id: versionId },
+      data: { status: "APPROVED", reviewedAt: new Date(), reviewedBy: prefix },
+    });
+    await db.knowledgeDocument.update({
+      where: { id: upload.documentId }, data: { activeVersionId: versionId },
+    });
+    await assert.rejects(
+      deleteUpload(db, upload.documentId, { pageId: "foreign-page", actor: prefix }),
+      { status: 404 },
+    );
+
+    const passwordHash = await hashPassword(password);
+    server = app.listen(0, "127.0.0.1");
+    await once(server, "listening");
+    const base = "http://127.0.0.1:" + server.address().port;
+    const cookies = {};
+    for (const role of ["ADMIN", "EDITOR"]) {
+      const email = prefix + "-" + role.toLowerCase() + "@test.invalid";
+      const user = await db.user.create({ data: { email, name: prefix, role, passwordHash } });
+      users.push(user.id);
+      const login = await fetch(base + "/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      assert.equal(login.status, 200);
+      cookies[role] = login.headers.get("set-cookie").split(";")[0];
+    }
+    const url = base + "/api/documents/" + upload.documentId;
+    const remove = (cookie) => fetch(url, {
+      method: "DELETE",
+      headers: cookie ? { Cookie: cookie } : {},
+    });
+    await assert.rejects(getUpload(db, upload.documentId, "foreign-page"), { status: 404 });
+    assert.equal((await fetch(url, { headers: { Cookie: cookies.ADMIN } })).status, 200);
+    assert.equal((await remove()).status, 401);
+    assert.equal((await remove(cookies.EDITOR)).status, 403);
+    const attempts = await Promise.all([remove(cookies.ADMIN), remove(cookies.ADMIN)]);
+    assert.deepEqual(attempts.map((response) => response.status), [200, 200]);
+    assert.equal((await fetch(url, { headers: { Cookie: cookies.ADMIN } })).status, 404);
+
+    const record = await db.knowledgeDocument.findUnique({
+      where: { id: upload.documentId }, include: { versions: true, sourceFile: true },
+    });
+    assert.ok(record.deletedAt);
+    assert.equal(record.activeVersionId, null);
+    assert.equal(record.versions.length, 1);
+    assert.ok(record.sourceFile);
+    assert.ok(!(await listUploads(db, { pageId, includeArchived: true }))
+      .some((item) => item.documentId === upload.documentId));
+    const audits = await db.auditLog.findMany({
+      where: { entityId: upload.documentId, action: "KNOWLEDGE_UPLOAD_DELETED" },
+    });
+    assert.equal(audits.length, 1);
+    assert.equal(audits[0].actor, users[0]);
+  } finally {
+    if (server) await new Promise((resolve) => server.close(resolve));
+    if (upload) {
+      await db.auditLog.deleteMany({ where: { entityId: upload.documentId } });
+      await db.knowledgeDocument.deleteMany({ where: { id: upload.documentId } });
+      await rm(path.join(uploadDir, path.basename(upload.sourceFile.filePath)), { force: true });
+    }
+    await db.session.deleteMany({ where: { userId: { in: users } } });
+    await db.user.deleteMany({ where: { id: { in: users } } });
     await db.$disconnect();
   }
 });

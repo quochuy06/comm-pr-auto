@@ -152,6 +152,11 @@ export interface ReplyDecision {
   reviewedAt: string | null;
   createdAt: string;
   updatedAt?: string;
+  sendStatus?: "PENDING" | "SENDING" | "SENT" | "FAILED" | "UNCERTAIN" | "SKIPPED" | null;
+  sendError?: string | null;
+  externalReplyId?: string | null;
+  escalatedAt?: string | null;
+  adviceKey?: string | null;
 }
 // HUY-API02: cấu hình PR, nội dung PR và hàng đợi gửi (outbox) của Page
 export type PrMode = "OFF" | "SEMI_AUTO" | "AUTO";
