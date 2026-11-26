@@ -239,10 +239,18 @@ model ReplyDecision {
   status         String   @default("PENDING") // PENDING | APPROVED | REJECTED
   reviewedBy     String?
   reviewedAt     DateTime?
+  adviceKey      String?  @unique
+  advice         AdviceInbound? @relation(fields: [adviceKey], references: [id])
+  sendStatus     String?
+  sendError      String?  @db.Text
+  externalReplyId String?
+  attemptedAt    DateTime?
+  escalatedAt    DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
   @@index([pageId, channel, status])
+  @@index([sendStatus, createdAt])
 }
 
 
@@ -521,4 +529,25 @@ model WorkflowAttempt {
   receipt Json?
   createdAt DateTime @default(now())
   @@index([jobId])
+}
+
+model AdviceInbound {
+  id            String   @id @default(uuid())
+  pageId        String
+  channel       String
+  remoteId      String
+  commentId     String?
+  senderId      String?
+  incomingAt    DateTime
+  text          String   @db.Text
+  configVersion Int
+  mode          String
+  stage         String   @default("ROUTE")
+  route         Json?
+  answerJobId   String?
+  replyDecision ReplyDecision?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  @@unique([pageId, channel, remoteId])
+  @@index([stage, createdAt])
 }

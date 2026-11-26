@@ -163,10 +163,10 @@ export async function checkContext(db, { documentId, versionId, pageId }) {
 
 // WF05: approved-source retrieval for answer drafting. Returns the citation
 // set (version ids) the workflow must stay within; no sending happens here.
-export async function answerContext(db, { question, pageId }) {
+export async function answerContext(db, { question, pageId, documentId }) {
   const result = await retrieveAnswer(db, {
     question: text(question, "Câu hỏi", 1000),
-    pageId,
+    pageId, documentId,
   });
   return {
     status: result.status,

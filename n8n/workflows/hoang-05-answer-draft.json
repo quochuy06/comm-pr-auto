@@ -35,7 +35,7 @@
         0
       ],
       "parameters": {
-        "jsCode": "const b=$json.body;const id=v=>typeof v==='string'&&/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/.test(v);const ver=v=>Number.isSafeInteger(v)&&v>=1;if(!b||b.contractVersion!==1||!id(b.jobId)||!id(b.attemptId)||!id(b.pageId)||!id(b.entityId)||!id(b.correlationId)||!b.versions||!ver(b.versions.input)||!ver(b.versions.config)||!ver(b.versions.content)||!b.context||typeof b.context!=='object'||Array.isArray(b.context))throw new Error('Invalid workflow input');if(b.kind!==\"knowledge.answer\")throw new Error('Wrong workflow kind');if(!id(b.context.requestId)||!['COMMENT','MESSENGER','INTERNAL'].includes(b.context.channel)||typeof b.context.question!=='string'||!b.context.question.trim()||b.context.question.length>1000||Object.keys(b.context).length!==3)throw new Error('Invalid answer context');return {json:{env:b}};"
+        "jsCode": "const b=$json.body;const id=v=>typeof v==='string'&&/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/.test(v);const ver=v=>Number.isSafeInteger(v)&&v>=1;if(!b||b.contractVersion!==1||!id(b.jobId)||!id(b.attemptId)||!id(b.pageId)||!id(b.entityId)||!id(b.correlationId)||!b.versions||!ver(b.versions.input)||!ver(b.versions.config)||!ver(b.versions.content)||!b.context||typeof b.context!=='object'||Array.isArray(b.context))throw new Error('Invalid workflow input');if(b.kind!==\"knowledge.answer\")throw new Error('Wrong workflow kind');if(!id(b.context.requestId)||!['COMMENT','MESSENGER','INTERNAL'].includes(b.context.channel)||typeof b.context.question!=='string'||!b.context.question.trim()||b.context.question.length>1000||Object.keys(b.context).some(k=>!['question','channel','requestId','documentId'].includes(k))||(b.context.documentId!==undefined&&!id(b.context.documentId)))throw new Error('Invalid answer context');return {json:{env:b}};"
       }
     },
     {
@@ -61,7 +61,7 @@
         0
       ],
       "parameters": {
-        "jsCode": "const e=$json.env;return {json:{env:e,request:{question:e.context.question,pageId:e.pageId}}};"
+        "jsCode": "const e=$json.env;return {json:{env:e,request:{question:e.context.question,pageId:e.pageId,...(e.context.documentId?{documentId:e.context.documentId}:{})}}};"
       }
     },
     {

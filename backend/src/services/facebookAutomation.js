@@ -1,5 +1,7 @@
 import { HttpError, text, audit } from "../lib/errors.js";
 import { createFacebookClient, FacebookError } from "./facebook.js";
+import { adviceRuntimeEnabled } from "./automationMode.js";
+import { queueAdviceInbound } from "./replyAdvice.js";
 
 const lock = (db, id) => db.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${id}))::text`;
 const sameVersion = (a, b) => !!a && !!b && +new Date(a) === +new Date(b);
@@ -44,6 +46,10 @@ export async function queueAutomaticComments(db) {
     const settings = await tx.settings.findUnique({ where: { id: "default" } });
     const current = await tx.comment.findUnique({ where: { id: c.id }, include: { facebookReply: true } });
     if (!r?.commentEnabled || !sameVersion(r.version, rule.version) || settings?.mode !== "CONDITIONAL" || !current || current.remoteDeleted || current.facebookReply || !["NONE", "PENDING"].includes(current.replyStatus)) return;
+    const advice = adviceRuntimeEnabled() && await tx.adviceInbound.findUnique({ where: { pageId_channel_remoteId: {
+      pageId: current.pageId, channel: "COMMENT", remoteId: current.externalId,
+    } } });
+    if (advice) return;
     const replyText = greeting(r.commentTemplate, current.author);
     await tx.facebookReply.create({ data: { commentId: c.id, pageId: r.pageId, sourceHash: current.sourceHash, text: replyText, automatic: true, automationVersion: r.version } });
     await tx.comment.update({ where: { id: c.id }, data: { replyText, replyStatus: "APPROVED" } });
@@ -58,6 +64,11 @@ export async function ingestInboxMessage(db, message, pageId, now = new Date()) 
   if (typeof message.id !== "string" || !message.id || message.id.length > 500 || !/^\d+$/.test(message.from?.id || "") || message.from.id === pageId || !message.to?.data?.some(p => p.id === pageId) || !Number.isFinite(+incomingAt) || +incomingAt > +now + 60000 || +now - incomingAt >= 86400000) return null;
   return db.$transaction(async tx => {
     await lock(tx, `messenger:${pageId}:${message.from.id}`);
+    const adviceText = typeof message.message === "string" ? message.message.trim() : "";
+    if (adviceText && adviceText.length <= 5000) await queueAdviceInbound(tx, {
+      pageId, channel: "MESSENGER", remoteId: message.id, senderId: message.from.id,
+      incomingAt, text: adviceText, stage: "CLASSIFY",
+    });
     const rule = await tx.facebookAutomation.findUnique({ where: { id: "default" } });
     if (!rule?.messengerEnabled || rule.pageId !== pageId || !rule.messengerEnabledAt || incomingAt < rule.messengerEnabledAt) return null;
     if (await tx.facebookInboxReply.findUnique({ where: { inboundId: message.id } })) return null;
@@ -70,13 +81,17 @@ export async function ingestInboxMessage(db, message, pageId, now = new Date()) 
 
 export async function pollFacebookInbox(db, client = createFacebookClient()) {
   const rule = await db.facebookAutomation.findUnique({ where: { id: "default" } });
-  if (!rule?.messengerEnabled || rule.pageId !== client.pageId) return;
+  const advice = adviceRuntimeEnabled() && await db.automationChannel.findUnique({ where: { pageId_channel: {
+    pageId: client.pageId, channel: "MESSENGER",
+  } } });
+  const greetingEnabled = rule?.messengerEnabled && rule.pageId === client.pageId;
+  if (!greetingEnabled && (!advice || advice.mode === "OFF")) return;
   try {
     const inbox = await client.inbox();
     for (const message of inbox.messages) await ingestInboxMessage(db, message, client.pageId);
-    await db.facebookAutomation.updateMany({ where: { id: rule.id, pageId: client.pageId }, data: { messengerSyncedAt: new Date(), messengerSyncError: inbox.complete ? null : "Đã đọc tối đa 100 hội thoại/lượt và 20 tin gần nhất/hội thoại; chưa đầy đủ hộp thư." } });
+    if (greetingEnabled) await db.facebookAutomation.updateMany({ where: { id: rule.id, pageId: client.pageId }, data: { messengerSyncedAt: new Date(), messengerSyncError: inbox.complete ? null : "Đã đọc tối đa 100 hội thoại/lượt và 20 tin gần nhất/hội thoại; chưa đầy đủ hộp thư." } });
   } catch (e) {
-    await db.facebookAutomation.updateMany({ where: { id: rule.id, pageId: client.pageId }, data: { messengerSyncedAt: new Date(), messengerSyncError: errorText(e) } });
+    if (greetingEnabled) await db.facebookAutomation.updateMany({ where: { id: rule.id, pageId: client.pageId }, data: { messengerSyncedAt: new Date(), messengerSyncError: errorText(e) } });
     throw e;
   }
 }

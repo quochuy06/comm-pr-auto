@@ -49,6 +49,7 @@ knowledgeInternal.post("/check-context", async (req, res) => {
 knowledgeInternal.post("/answer-context", async (req, res) => {
   res.json({ success: true, data: await answerContext(prisma, {
     question: req.body.question,
+    documentId: page(req.body.documentId),
     pageId: page(req.body.pageId) ?? knowledgeScope(),
   }) });
 });

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install the eight member-owned workflows into the existing local n8n, with private backups.
+"""Install the member-owned workflows into the existing local n8n, with private backups.
 Run explicitly from the project root. Secrets never enter tracked workflow JSON.
 """
 import json, pathlib, subprocess, tempfile, os, datetime, time, urllib.request
@@ -39,6 +39,10 @@ if key: credentials.append({'id':'comm-pr-gemini','name':'Comm PR Gemini','type'
 elif not any(c['id']=='comm-pr-gemini' for c in sql('SELECT id FROM credentials_entity')): raise RuntimeError('Gemini key not found. Configure Comm PR Gemini credential in n8n.')
 ids={'content':current['id'],'image':'commPRImage01','planning':'commPRPlanning01','publishing':'commPRPublish01','repurpose':'commPRRepurpose01','report':'commPRReport01','community':'commPRCommunity1','crisis':'commPRCrisis01','ingest':'commPRIngest01','knowledgeCheck':'commPRCheck01','answerDraft':'commPRAnswer01'}
 files={'content':'hoang-01-content.json','image':'hoang-02-image.json','planning':'huy-01-planning.json','publishing':'huy-02-publishing.json','repurpose':'bao-01-repurpose.json','report':'bao-02-report.json','community':'phuc-01-community.json','crisis':'phuc-02-crisis.json','ingest':'hoang-03-document-ingest.json','knowledgeCheck':'hoang-04-knowledge-check.json','answerDraft':'hoang-05-answer-draft.json'}
+for number, stage in [('03', 'messenger'), ('04', 'rules'), ('05', 'review'), ('06', 'send'), ('07', 'sla')]:
+    kind = f'advice-{stage}'
+    ids[kind] = f'commPRAdvice{number}'
+    files[kind] = f'phuc-{number}-{stage}.json'
 bundle=[]
 for kind,filename in files.items():
     w=json.loads((ROOT/'n8n/workflows'/filename).read_text());w['id']=ids[kind]

@@ -1,4 +1,5 @@
 import { buildWorkflow, writeWorkflow } from "../workflow-builder.mjs";
+import { addCommentAdvice, buildAdviceWorkflows } from "./phuc-g2.mjs";
 import { specs } from "./legacy-specs.mjs";
 export function build() {
   for(const kind of ['community','crisis']) {
@@ -20,6 +21,8 @@ export function build() {
     // Review validator must preserve the policy/evidence checks preceding the AI review.
     const reviewer=w.nodes.find(n=>n.name==='12 Validate reviewer response');
     reviewer.parameters.jsCode=reviewer.parameters.jsCode.replace("$('08 Validate generated fields')",`$('${name}')`);
+    if (kind === 'community') addCommentAdvice(w);
     writeWorkflow(kind==='community'?'phuc-01-community.json':'phuc-02-crisis.json',w);
   }
+  buildAdviceWorkflows();
 }

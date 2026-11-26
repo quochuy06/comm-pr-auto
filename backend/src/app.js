@@ -24,6 +24,7 @@ import replyDecisionRoutes from "./routes/replyDecisionRoutes.js";
 import videoScheduleRoutes from "./routes/videoScheduleRoutes.js";
 import prRoutes from "./routes/prRoutes.js";
 import expansionRoutes, { expansionInternal } from "./routes/expansionRoutes.js";
+import adviceInternal from "./routes/adviceInternalRoutes.js";
 import knowledgeInternal from "./routes/knowledgeInternalRoutes.js";
 import { mediaDir } from "./services/images.js";
 import facebookRoutes, { facebookWebhook } from "./routes/facebookRoutes.js";
@@ -62,6 +63,7 @@ app.post("/api/webhooks/prepare-image", internalOnly, prepareImage);
 app.post("/api/webhooks/content-text", internalOnly, handleTextCallback);
 app.use("/api/workflow-internal", internalOnly, expansionInternal);
 app.use("/api/workflow-internal/knowledge", internalOnly, knowledgeInternal);
+app.use("/api/workflow-internal/advice", internalOnly, adviceInternal);
 app.post("/api/webhooks/contract-v1", internalOnly, async (req,res) => {
   res.json({success:true,data:await finalizeContractJob(prisma,req.body)});
 });

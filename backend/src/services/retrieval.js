@@ -67,7 +67,7 @@ export async function updateBrandVoice(db, { tone, style, forbidden, version }, 
 
 // Truy xuất + kiểm tra nguồn cho một câu hỏi. KHÔNG gửi đi đâu cả — luồng soạn
 // thảo/gửi thuộc HOANG-WF05/PHUC-WF05/06.
-export async function retrieveAnswer(db, { question, pageId = "default" } = {}) {
+export async function retrieveAnswer(db, { question, pageId = "default", documentId } = {}) {
   const q = normalizeKeyword(question);
   const words = contentWords(q);
   if (!q || !words.length)
@@ -75,7 +75,7 @@ export async function retrieveAnswer(db, { question, pageId = "default" } = {}) 
 
   // CHỈ chunk thuộc phiên bản đã kích hoạt của tài liệu chưa lưu trữ, đúng Page.
   const documents = await db.knowledgeDocument.findMany({
-    where: { pageId, archivedAt: null, activeVersion: { status: "APPROVED" } },
+    where: { pageId, archivedAt: null, activeVersion: { status: "APPROVED" }, ...(documentId ? { id: documentId } : {}) },
     include: {
       activeVersion: { include: { chunks: true } },
     },

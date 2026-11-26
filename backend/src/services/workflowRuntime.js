@@ -82,9 +82,10 @@ const businessKinds = {
   // or an explicit INSUFFICIENT/CONFLICT status. Never sent to customers here.
   "knowledge.answer": {
     checkContext(ctx) {
-      const allowed = ["question", "channel", "requestId"];
+      const allowed = ["question", "channel", "requestId", "documentId"];
       if (Object.keys(ctx).some(k => !allowed.includes(k)) ||
-          !["COMMENT", "MESSENGER", "INTERNAL"].includes(ctx.channel) || !identifier(ctx.requestId))
+          !["COMMENT", "MESSENGER", "INTERNAL"].includes(ctx.channel) || !identifier(ctx.requestId) ||
+          (ctx.documentId !== undefined && !identifier(ctx.documentId)))
         throw new HttpError(400, "Context answer không hợp lệ.");
       text(ctx.question, "Câu hỏi", 1000);
     },

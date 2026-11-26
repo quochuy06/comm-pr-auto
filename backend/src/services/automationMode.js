@@ -29,12 +29,14 @@ export function previewAutomationMode(input) {
     : outcome("ELIGIBLE_FOR_AUTO_REPLY", ["SIMULATION_CHECKS_PASSED"]);
 }
 
+export const adviceRuntimeEnabled = () => process.env.REPLY_ADVICE_ENABLED === "true";
+
 export async function channelModes(db, pageId) {
   const saved = await db.automationChannel.findMany({ where: { pageId } });
   return { pageId, channels: ["COMMENT", "MESSENGER"].map(channel =>
     saved.find(row => row.channel === channel) || { channel, mode: "OFF", version: 0 }),
     // Advice activation never changes the independent fixed greeting worker.
-    adviceRuntimeEnabled: false };
+    adviceRuntimeEnabled: adviceRuntimeEnabled() };
 }
 
 export async function updateChannelMode(db, pageId, channel, input, actor) {

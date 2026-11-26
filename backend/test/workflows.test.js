@@ -7,7 +7,8 @@ for (const file of fs
   .filter((f) => f.endsWith(".json"))) {
   const w = JSON.parse(fs.readFileSync("../n8n/workflows/" + file));
   test(`${file}: connected nodes, credentials, code syntax and failure branch`, () => {
-    assert.ok(w.nodes.length >= 12);
+    const advice = /^phuc-0[3-7]-/.test(file);
+    assert.ok(w.nodes.length >= (advice ? 9 : 12));
     const names = new Set(w.nodes.map((n) => n.name));
     assert.equal(names.size, w.nodes.length);
     for (const [source, conn] of Object.entries(w.connections)) {
@@ -78,6 +79,24 @@ for (const file of fs
       assert.deepEqual(result.groundedSources, [{ id: "v1", version: 1 }]);
       assert.equal(result.knowledgeStatus, "SUFFICIENT");
       assert.equal(deliver({ ...reviewed, knowledge: failedLookup.knowledge }).review.grounded, false);
+    }
+    if (advice) {
+      const list = w.nodes.find(n => n.name === "Read next batch");
+      const apply = w.nodes.find(n => n.name.startsWith("Apply verified "));
+      assert.match(list.parameters.url, /\/advice\/.+\/candidates$/);
+      assert.match(apply.parameters.url, /\/advice\/.+\/(classification|route|gate|deliver|escalate)$/);
+      assert.equal(w.connections[apply.name].main[1][0].node, "Leave retryable work in its queue");
+      assert.equal(w.settings.saveDataSuccessExecution, "none");
+      const parser = w.nodes.find(n => n.name === "Fail closed on malformed classification");
+      if (parser) {
+        const run = (json) => vm.runInNewContext(`(function(){${parser.parameters.jsCode}})()`, {
+          $json: json, $: () => ({ item: { json: { id: "verified-id" } } }),
+        }).json;
+        assert.equal(run({ error: "HTTP 503" }).assessment, null);
+        const valid = { risk: "LOW", sensitive: false, intent: "INFORMATION" };
+        assert.equal(run({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: JSON.stringify(valid) }] } }] }).assessment.risk, "LOW");
+      }
+      return;
     }
     if (w.nodes.some(n => n.name === "08 Publish atomically")) {
       assert.ok(w.nodes.some(n => n.parameters.url?.endsWith("/publish")));

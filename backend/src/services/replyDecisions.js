@@ -91,13 +91,17 @@ function pendingReply(record) {
   };
 }
 
-export async function reviewReplyDecision(db, id, { approve, reviewer, reason, expectedUpdatedAt } = {}) {
+export async function reviewReplyDecision(db, id, { approve, reviewer, reason, expectedUpdatedAt, confirmSend } = {}) {
   const status = approve ? "APPROVED" : "REJECTED";
   return db.$transaction(async (tx) => {
     const record = await getReplyDecision(tx, id);
     if (record.status === status) return record;
     if (record.status !== "PENDING") throw new HttpError(409, changedMessage);
     checkReplyVersion(record, expectedUpdatedAt);
+    if (approve && record.adviceKey && confirmSend !== true)
+      throw new HttpError(400, "Cần xác nhận gửi chính nội dung đang xem lên Facebook.");
+    if (approve && record.adviceKey && expectedUpdatedAt === undefined)
+      throw new HttpError(400, "Cần xác nhận phiên bản phản hồi đang xem.");
     if (approve && record.decision === "NEEDS_HUMAN")
       throw new HttpError(409, "Ca này được đánh dấu cần người xử lý; xem lý do trước khi duyệt.");
     if (approve && (record.decision === "SKIPPED" || !record.replyText?.trim()))
@@ -106,6 +110,7 @@ export async function reviewReplyDecision(db, id, { approve, reviewer, reason, e
       where: pendingReply(record),
       data: {
         status,
+        ...(record.adviceKey ? { sendStatus: approve ? "PENDING" : "SKIPPED" } : {}),
         reviewedBy: reviewer || null,
         reviewedAt: new Date(),
         reason: reason ? String(reason).slice(0, 1000) : record.reason,

@@ -42,6 +42,7 @@ router.post("/reply-decisions/:id/approve", roles("ADMIN", "REVIEWER"), async (r
     success: true,
     data: await reviewReplyDecision(prisma, idOf(req), {
       approve: true,
+      confirmSend: req.body?.confirmSend,
       reviewer: req.user.id,
       expectedUpdatedAt: req.body?.expectedUpdatedAt,
     }),

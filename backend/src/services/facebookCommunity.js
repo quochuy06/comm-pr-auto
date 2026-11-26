@@ -3,6 +3,7 @@ import { createFacebookClient, facebookConfig, FacebookError } from "./facebook.
 import { HttpError, audit, text } from "../lib/errors.js";
 import { createJob, dispatch } from "./workflows.js";
 import { evaluateCrisis } from "./crisis.js";
+import { queueAdviceInbound } from "./replyAdvice.js";
 import { queueAutomaticComments, ingestInboxMessage, pollFacebookInbox, sendInboxReply, recoverInboxReplies } from "./facebookAutomation.js";
 
 export const commentHash = value => createHash("sha256").update(value).digest("hex");
@@ -52,6 +53,12 @@ export async function syncFacebookComments(db, scheduleId, { client = createFace
           : await tx.comment.create({ data: { ...fields, source: "FACEBOOK", externalId: remote.id, pageId: s.pageId, postId: s.postId,
             ...(Number.isFinite(Date.parse(remote.created_time)) ? { createdAt: new Date(remote.created_time) } : {}) } });
         imported++;
+        if (remote.from?.id && Number.isFinite(Date.parse(remote.created_time))) {
+          await queueAdviceInbound(tx, {
+            pageId: s.pageId, channel: "COMMENT", remoteId: remote.id,
+            commentId: c.id, incomingAt: new Date(remote.created_time), text: remote.message, stage: "COMMENT_TRIAGE",
+          });
+        }
         return createJob(tx, "community", c.id);
       });
       if (job) { dispatchJob(job); await crisis(job.entityId); }

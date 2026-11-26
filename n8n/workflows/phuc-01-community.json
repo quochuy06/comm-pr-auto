@@ -317,6 +317,164 @@
       "parameters": {
         "jsCode": "if($json.ok){const d=$json.result;if(['SAFETY','LEGAL'].includes(d.issueType)||d.urgency==='HIGH'){d.sensitive=true;d.risk='HIGH';}else if(d.issueType==='COMPLAINT'&&d.risk==='LOW'){d.risk='MEDIUM';}}return {json:$json};"
       }
+    },
+    {
+      "id": "phuc-01-comment-1",
+      "name": "G2 Check periodically",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        1600
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "seconds",
+              "secondsInterval": 30
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "phuc-01-comment-2",
+      "name": "G2 Run in QA",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        1600
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "phuc-01-comment-3",
+      "name": "G2 Read next batch",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        1600
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://172.17.0.1:5000/api/workflow-internal/advice/comment/candidates",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{}",
+        "options": {
+          "timeout": 25000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "comm-pr-callback",
+          "name": "Comm PR Internal Token"
+        }
+      }
+    },
+    {
+      "id": "phuc-01-comment-4",
+      "name": "G2 Validate and split candidate IDs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        1600
+      ],
+      "parameters": {
+        "jsCode": "\n    if ($json.success !== true || !Array.isArray($json.data)) throw new Error(\"Invalid advice batch\");\n    const candidates = $json.data.slice(0, 20);\n    return candidates.flatMap(item => {\n      if (typeof item.id !== \"string\" || !/^[0-9a-f-]{36}$/i.test(item.id)) return [];\n      return [{ json: item, pairedItem: 0 }];\n    });\n  ",
+        "mode": "runOnceForAllItems"
+      }
+    },
+    {
+      "id": "phuc-01-comment-5",
+      "name": "G2 Process one candidate at a time",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        960,
+        1600
+      ],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "phuc-01-comment-6",
+      "name": "G2 Return execution summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        1600
+      ],
+      "parameters": {
+        "jsCode": "return [{ json: { processed: $input.all().length } }];",
+        "mode": "runOnceForAllItems"
+      }
+    },
+    {
+      "id": "phuc-01-comment-7",
+      "name": "G2 Apply verified triage",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1440,
+        1600
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://172.17.0.1:5000/api/workflow-internal/advice/comment/triage",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ id: $json.id }) }}",
+        "options": {
+          "timeout": 25000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "comm-pr-callback",
+          "name": "Comm PR Internal Token"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "phuc-01-comment-8",
+      "name": "G2 Record step result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        1600
+      ],
+      "parameters": {
+        "jsCode": "return { json: { outcome: $json.data?.status || 'PROCESSED' } };",
+        "mode": "runOnceForEachItem"
+      }
+    },
+    {
+      "id": "phuc-01-comment-9",
+      "name": "G2 Leave retryable work in its queue",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1920,
+        1600
+      ],
+      "parameters": {
+        "jsCode": "return { json: { outcome: 'ERROR' } };",
+        "mode": "runOnceForEachItem"
+      }
     }
   ],
   "connections": {
@@ -513,13 +671,115 @@
           }
         ]
       ]
+    },
+    "G2 Check periodically": {
+      "main": [
+        [
+          {
+            "node": "G2 Read next batch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "G2 Run in QA": {
+      "main": [
+        [
+          {
+            "node": "G2 Read next batch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "G2 Read next batch": {
+      "main": [
+        [
+          {
+            "node": "G2 Validate and split candidate IDs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "G2 Validate and split candidate IDs": {
+      "main": [
+        [
+          {
+            "node": "G2 Process one candidate at a time",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "G2 Process one candidate at a time": {
+      "main": [
+        [
+          {
+            "node": "G2 Return execution summary",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "G2 Apply verified triage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "G2 Apply verified triage": {
+      "main": [
+        [
+          {
+            "node": "G2 Record step result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "G2 Leave retryable work in its queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "G2 Record step result": {
+      "main": [
+        [
+          {
+            "node": "G2 Process one candidate at a time",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "G2 Leave retryable work in its queue": {
+      "main": [
+        [
+          {
+            "node": "G2 Process one candidate at a time",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {
     "executionOrder": "v1",
     "executionTimeout": 240,
-    "saveDataErrorExecution": "all",
-    "saveDataSuccessExecution": "all"
+    "saveDataErrorExecution": "none",
+    "saveDataSuccessExecution": "none"
   },
   "active": false
 }

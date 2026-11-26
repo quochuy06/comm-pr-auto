@@ -1,0 +1,276 @@
+{
+  "name": "Phúc · 06 · Gửi phản hồi đã đủ điều kiện",
+  "nodes": [
+    {
+      "id": "phuc-06-send-1",
+      "name": "Check periodically",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "seconds",
+              "secondsInterval": 30
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "phuc-06-send-2",
+      "name": "Run in QA",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "phuc-06-send-3",
+      "name": "Read next batch",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://172.17.0.1:5000/api/workflow-internal/advice/send/candidates",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{}",
+        "options": {
+          "timeout": 25000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "comm-pr-callback",
+          "name": "Comm PR Internal Token"
+        }
+      }
+    },
+    {
+      "id": "phuc-06-send-4",
+      "name": "Validate and split candidate IDs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        0
+      ],
+      "parameters": {
+        "jsCode": "\n    if ($json.success !== true || !Array.isArray($json.data)) throw new Error(\"Invalid advice batch\");\n    const candidates = $json.data.slice(0, 20);\n    return candidates.flatMap(item => {\n      if (typeof item.id !== \"string\" || !/^[0-9a-f-]{36}$/i.test(item.id)) return [];\n      return [{ json: item, pairedItem: 0 }];\n    });\n  ",
+        "mode": "runOnceForAllItems"
+      }
+    },
+    {
+      "id": "phuc-06-send-5",
+      "name": "Process one candidate at a time",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        960,
+        0
+      ],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "phuc-06-send-6",
+      "name": "Return execution summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        0
+      ],
+      "parameters": {
+        "jsCode": "return [{ json: { processed: $input.all().length } }];",
+        "mode": "runOnceForAllItems"
+      }
+    },
+    {
+      "id": "phuc-06-send-7",
+      "name": "Apply verified deliver",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1440,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://172.17.0.1:5000/api/workflow-internal/advice/send/deliver",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ id: $json.id }) }}",
+        "options": {
+          "timeout": 25000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "comm-pr-callback",
+          "name": "Comm PR Internal Token"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "phuc-06-send-8",
+      "name": "Record step result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        0
+      ],
+      "parameters": {
+        "jsCode": "return { json: { outcome: $json.data?.status || 'PROCESSED' } };",
+        "mode": "runOnceForEachItem"
+      }
+    },
+    {
+      "id": "phuc-06-send-9",
+      "name": "Leave retryable work in its queue",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1920,
+        0
+      ],
+      "parameters": {
+        "jsCode": "return { json: { outcome: 'ERROR' } };",
+        "mode": "runOnceForEachItem"
+      }
+    }
+  ],
+  "connections": {
+    "Check periodically": {
+      "main": [
+        [
+          {
+            "node": "Read next batch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run in QA": {
+      "main": [
+        [
+          {
+            "node": "Read next batch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read next batch": {
+      "main": [
+        [
+          {
+            "node": "Validate and split candidate IDs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate and split candidate IDs": {
+      "main": [
+        [
+          {
+            "node": "Process one candidate at a time",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process one candidate at a time": {
+      "main": [
+        [
+          {
+            "node": "Return execution summary",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Apply verified deliver",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply verified deliver": {
+      "main": [
+        [
+          {
+            "node": "Record step result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Leave retryable work in its queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record step result": {
+      "main": [
+        [
+          {
+            "node": "Process one candidate at a time",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leave retryable work in its queue": {
+      "main": [
+        [
+          {
+            "node": "Process one candidate at a time",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Ho_Chi_Minh",
+    "saveManualExecutions": false,
+    "saveDataSuccessExecution": "none",
+    "saveDataErrorExecution": "none"
+  }
+}

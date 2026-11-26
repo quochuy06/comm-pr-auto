@@ -294,10 +294,10 @@ function buildCheck() {
 function buildAnswer() {
   const w = scaffold("Hoàng · 05 · Soạn trả lời có nguồn", "draft-answer", 300);
   w.add("02 Validate identifiers", "code", { jsCode: VALIDATE_IDS("knowledge.answer",
-    "if(!id(b.context.requestId)||!['COMMENT','MESSENGER','INTERNAL'].includes(b.context.channel)||typeof b.context.question!=='string'||!b.context.question.trim()||b.context.question.length>1000||Object.keys(b.context).length!==3)throw new Error('Invalid answer context');") });
+    "if(!id(b.context.requestId)||!['COMMENT','MESSENGER','INTERNAL'].includes(b.context.channel)||typeof b.context.question!=='string'||!b.context.question.trim()||b.context.question.length>1000||Object.keys(b.context).some(k=>!['question','channel','requestId','documentId'].includes(k))||(b.context.documentId!==undefined&&!id(b.context.documentId)))throw new Error('Invalid answer context');") });
   w.add("03 Limit context", "code", { jsCode: LIMIT_CONTEXT });
   w.add("04 Build retrieval request", "code", { jsCode:
-    "const e=$json.env;return {json:{env:e,request:{question:e.context.question,pageId:e.pageId}}};" });
+    "const e=$json.env;return {json:{env:e,request:{question:e.context.question,pageId:e.pageId,...(e.context.documentId?{documentId:e.context.documentId}:{})}}};" });
   httpStep(w, "05 Retrieve approved sources", "answer-context");
   w.add("06 Validate retrieval", "code", { jsCode:
     "const x=$json;const env=$('02 Validate identifiers').first().json.env;const r=x.data;" +
