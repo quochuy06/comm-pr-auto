@@ -170,17 +170,23 @@ function DecisionCard({
           <button
             className="btn small"
             disabled={busy || !d.replyText || ["NEEDS_HUMAN", "SKIPPED"].includes(d.decision)}
-            onClick={() =>
+            onClick={() => {
+              if (d.adviceKey) {
+                const destination = d.channel === "COMMENT"
+                  ? "phản hồi công khai dưới bình luận Facebook"
+                  : "tin nhắn riêng tới người đã nhắn qua Messenger";
+                if (!window.confirm(`Xác nhận duyệt để hệ thống gửi ${destination}?`)) return;
+              }
               void act(
                 `/reply-decisions/${d.id}/approve`,
                 "POST",
-                {},
+                d.adviceKey ? { confirmSend: true } : {},
                 "APPROVED",
-                "Đã duyệt quyết định phản hồi.",
-              )
-            }
+                d.adviceKey ? "Đã duyệt và đưa phản hồi vào hàng gửi." : "Đã duyệt quyết định phản hồi.",
+              );
+            }}
           >
-            Duyệt
+            {d.adviceKey ? "Duyệt để gửi" : "Duyệt"}
           </button>
           <button
             className="btn danger small"
