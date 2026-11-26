@@ -3,7 +3,7 @@ import express from "express";
 import prisma from "../prisma.js";
 import { HttpError } from "../lib/errors.js";
 import { roles } from "../middleware/auth.js";
-import { ingestUpload, getUpload, listUploads } from "../services/documents.js";
+import { ingestUpload, getUpload, listUploads, deleteUpload } from "../services/documents.js";
 import { knowledgeScope } from "../services/knowledge.js";
 
 // HOANG-API02: upload PDF/DOCX/TXT (raw body + filename trong query), xem danh
@@ -34,7 +34,7 @@ router.get("/", async (req, res) => {
   res.json({
     success: true,
     data: await listUploads(prisma, {
-      pageId: req.query.pageId ? String(req.query.pageId) : undefined,
+      pageId: knowledgeScope(req.query),
       includeArchived: req.query.includeArchived === "true",
     }),
   });
@@ -43,7 +43,17 @@ router.get("/", async (req, res) => {
 router.get("/:id", async (req, res) => {
   if (!UUID.test(req.params.id || ""))
     throw new HttpError(400, "ID tài liệu không hợp lệ.");
-  res.json({ success: true, data: await getUpload(prisma, req.params.id) });
+  res.json({ success: true, data: await getUpload(prisma, req.params.id, knowledgeScope(req.query)) });
+});
+
+router.delete("/:id", roles("ADMIN"), async (req, res) => {
+  if (!UUID.test(req.params.id || ""))
+    throw new HttpError(400, "ID tài liệu không hợp lệ.");
+  await deleteUpload(prisma, req.params.id, {
+    pageId: knowledgeScope(req.query),
+    actor: req.user.id,
+  });
+  res.json({ success: true, data: { id: req.params.id } });
 });
 
 export default router;

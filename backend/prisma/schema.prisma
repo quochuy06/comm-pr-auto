@@ -447,6 +447,7 @@ model KnowledgeDocument {
   title           String
   activeVersionId String? @unique
   archivedAt      DateTime?
+  deletedAt       DateTime?
   createdAt       DateTime @default(now())
   versions        KnowledgeVersion[] @relation("DocumentVersions")
   activeVersion   KnowledgeVersion? @relation("ActiveVersion", fields: [activeVersionId], references: [id], onDelete: SetNull)

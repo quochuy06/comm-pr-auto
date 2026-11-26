@@ -22,7 +22,7 @@ async function scopedDocument(db, documentId, pageId) {
     where: { id: documentId },
     include: { sourceFile: true },
   });
-  if (!document || (pageId !== undefined && document.pageId !== pageId))
+  if (!document || document.deletedAt || (pageId !== undefined && document.pageId !== pageId))
     throw new HttpError(404, "Không tìm thấy tài liệu.");
   return document;
 }
@@ -102,6 +102,9 @@ export async function saveIngestDraft(db, { documentId, pageId, chunks, createdB
   if (new Set(clean.map((c) => c.ordinal)).size !== clean.length)
     throw new HttpError(400, "Thứ tự đoạn văn bị trùng.");
   return db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "KnowledgeDocument" WHERE id = ${document.id} FOR UPDATE`;
+    const current = await scopedDocument(tx, document.id, pageId);
+    if (current.archivedAt) throw new HttpError(409, "Tài liệu đã lưu trữ; không tạo bản nháp mới.");
     const latest = await tx.knowledgeVersion.findFirst({
       where: { documentId: document.id }, orderBy: { version: "desc" },
     });

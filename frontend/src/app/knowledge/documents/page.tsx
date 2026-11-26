@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { send, errorMessage, useResource } from "@/lib/api";
 import { PageTitle, Notice, Empty, dateTime } from "@/components/ui";
+import { useAuth } from "@/components/shell";
 
 type SourceFile = {
   filename: string;
@@ -25,7 +26,7 @@ type UploadRecord = {
   pageId: string;
   title: string;
   archived: boolean;
-  sourceFile: SourceFile;
+  sourceFile: SourceFile | null;
   versions: UploadVersion[];
 };
 type SourceRef = {
@@ -44,6 +45,7 @@ type AnswerContract = {
   brandVoice: { tone: string; style: string; forbidden: string[] } | null;
 };
 
+const MAX_FILES = 10;
 const MAX_BYTES = 5 * 1024 * 1024;
 const ACCEPTED = [".pdf", ".docx", ".txt"];
 const answerStatus: Record<
@@ -80,97 +82,108 @@ async function uploadDocument(file: File): Promise<UploadRecord> {
   return body.data as UploadRecord;
 }
 
+type UploadResult = {
+  filename: string;
+  summary: string;
+  ok: boolean;
+};
+
 function UploadSection({ onUploaded }: { onUploaded: () => void }) {
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
-  const [result, setResult] = useState<UploadRecord | null>(null);
+  const [results, setResults] = useState<UploadResult[]>([]);
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (busy) return;
     setError("");
-    setNotice("");
-    setResult(null);
-    if (!file) {
-      setError("Hãy chọn tệp cần tải lên.");
+    setResults([]);
+    if (!files.length || files.length > MAX_FILES) {
+      setError(`Hãy chọn từ 1 đến ${MAX_FILES} tệp.`);
       return;
     }
-    const lower = file.name.toLowerCase();
-    if (!ACCEPTED.some((ext) => lower.endsWith(ext))) {
-      setError("Chỉ chấp nhận tệp .pdf, .docx và .txt.");
-      return;
-    }
-    if (file.size > MAX_BYTES) {
-      setError("Tệp vượt quá 5MB. Hãy chọn tệp nhỏ hơn.");
-      return;
-    }
+
+    const form = e.currentTarget;
     setBusy(true);
     try {
-      const record = await uploadDocument(file);
-      setResult(record);
-      setNotice("Đã tải lên tài liệu.");
+      for (const file of files) {
+        let result: UploadResult;
+        try {
+          if (!ACCEPTED.some((ext) => file.name.toLowerCase().endsWith(ext))) {
+            throw new Error("Chỉ chấp nhận tệp .pdf, .docx và .txt.");
+          }
+          if (file.size === 0 || file.size > MAX_BYTES) {
+            throw new Error("Tệp phải có nội dung và có dung lượng tối đa 5 MB.");
+          }
+          const record = await uploadDocument(file);
+          const ok = record.sourceFile?.extractionStatus === "OK";
+          result = {
+            filename: file.name,
+            ok,
+            summary: ok
+              ? `Đã trích xuất ${record.versions[0]?.chunkCount ?? 0} đoạn.`
+              : record.sourceFile?.extractionError || "Không trích xuất được nội dung.",
+          };
+        } catch (err) {
+          result = { filename: file.name, ok: false, summary: errorMessage(err) };
+        }
+        setResults((previous) => [...previous, result]);
+      }
+      form.reset();
+      setFiles([]);
       onUploaded();
-    } catch (err) {
-      setError(errorMessage(err));
     } finally {
       setBusy(false);
     }
   }
 
-  const drafts = result?.versions.filter((v) => v.status === "DRAFT").length ?? 0;
-  const chunks = result?.versions[0]?.chunkCount ?? 0;
   return (
     <section className="card" aria-busy={busy}>
       <h2>Tải lên tài liệu</h2>
       <p className="hint">
-        Chấp nhận tệp .pdf, .docx, .txt tối đa 5MB. Tài liệu được trích xuất
-        thành các đoạn và chỉ dùng làm nguồn khi nội dung được duyệt.
+        Mỗi lượt tối đa {MAX_FILES} tệp PDF, DOCX hoặc TXT, tối đa 5 MB mỗi tệp.
+        Nội dung cần được duyệt trước khi dùng làm nguồn.
       </p>
-      <Notice error={error} message={notice} />
+      <Notice error={error} />
       <form onSubmit={submit}>
-        <fieldset
-          disabled={busy}
-          style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}
-        >
-          <div className="field">
-            <label htmlFor="doc-file">Tệp tài liệu</label>
-            <input
-              id="doc-file"
-              type="file"
-              accept=".pdf,.docx,.txt"
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            />
-            <p className="hint">
-              {file
-                ? `Đã chọn: ${file.name} · ${formatSize(file.size)}`
-                : "Chưa chọn tệp nào."}
-            </p>
-          </div>
-          <button className="btn" type="submit">
-            {busy ? "Đang tải lên…" : "Tải lên"}
-          </button>
-        </fieldset>
-      </form>
-      {result && (
-        <div className="mt">
-          <h3>Trạng thái trích xuất</h3>
-          {result.sourceFile.extractionStatus === "OK" ? (
-            <p>
-              <span className="badge good">OK</span>{" "}
-              Trích xuất thành công: {drafts} bản nháp · {chunks} đoạn.
-            </p>
-          ) : (
-            <p>
-              <span className="badge danger">FAILED</span>{" "}
-              Trích xuất thất bại:{" "}
-              {result.sourceFile.extractionError ||
-                "Không rõ nguyên nhân. Hãy kiểm tra lại tệp."}
-            </p>
-          )}
+        <div className="field">
+          <label htmlFor="doc-file">Tệp tài liệu</label>
+          <input
+            id="doc-file"
+            type="file"
+            accept=".pdf,.docx,.txt"
+            multiple
+            disabled={busy}
+            onChange={(e) => {
+              const selected = Array.from(e.target.files ?? []);
+              setError(selected.length > MAX_FILES ? `Chỉ chọn tối đa ${MAX_FILES} tệp mỗi lượt.` : "");
+              setFiles(selected);
+            }}
+          />
         </div>
-      )}
+        <button className="btn" type="submit" disabled={busy || !files.length || files.length > MAX_FILES}>
+          {busy ? `Đang xử lý ${results.length}/${files.length} tệp…` : "Tải lên"}
+        </button>
+      </form>
+      <div aria-live="polite">
+        {results.length > 0 && (
+          <div className="mt">
+            <h3>Kết quả từng tệp</h3>
+            <ul>
+              {results.map((result, index) => (
+                <li key={index}>
+                  <strong>{result.filename}</strong>{" "}
+                  <span className={`badge ${result.ok ? "good" : "danger"}`}>
+                    {result.ok ? "Đã trích xuất" : "Lỗi"}
+                  </span>
+                  <p className="hint">{result.summary}</p>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
     </section>
   );
 }
@@ -186,10 +199,45 @@ function DocumentsSection({
   loading: boolean;
   refresh: () => void;
 }) {
+  const canDelete = useAuth()?.role === "ADMIN";
+  const [deleteTarget, setDeleteTarget] = useState<UploadRecord | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+  const [deleteMessage, setDeleteMessage] = useState("");
+
+  async function confirmDelete() {
+    if (!canDelete || !deleteTarget || deleting) return;
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      await send(`/documents/${deleteTarget.documentId}`, "DELETE");
+      setDeleteMessage(`Đã xóa tài liệu ${deleteTarget.title}.`);
+      setDeleteTarget(null);
+      refresh();
+    } catch (err) {
+      setDeleteError(errorMessage(err));
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   return (
     <section className="card">
       <h2>Danh sách tài liệu</h2>
-      <Notice error={loadError} />
+      <Notice error={loadError || deleteError} message={deleteMessage} />
+      {deleteTarget && canDelete && (
+        <div className="card mb" role="group" aria-label="Xác nhận xóa tài liệu">
+          <p>Xóa <strong>{deleteTarget.title}</strong> khỏi kho tri thức và ngừng dùng làm nguồn?</p>
+          <div className="row wrap mt">
+            <button className="btn danger small" type="button" disabled={deleting} onClick={() => void confirmDelete()}>
+              {deleting ? "Đang xóa…" : "Xác nhận xóa"}
+            </button>
+            <button className="btn secondary small" type="button" disabled={deleting} onClick={() => { setDeleteTarget(null); setDeleteError(""); }}>
+              Hủy
+            </button>
+          </div>
+        </div>
+      )}
       <div className="row wrap">
         <button className="btn secondary" type="button" onClick={refresh}>
           Tải lại
@@ -210,23 +258,24 @@ function DocumentsSection({
                 <th>Trạng thái trích xuất</th>
                 <th>Số phiên bản / đoạn</th>
                 <th>Ngày tải</th>
+                {canDelete && <th>Thao tác</th>}
               </tr>
             </thead>
             <tbody>
               {data.map((rec) => (
                 <tr key={rec.documentId}>
                   <td>
-                    {rec.sourceFile.filename}
+                    {rec.sourceFile?.filename ?? rec.title}
                     {rec.archived && (
                       <span className="muted"> · Đã lưu trữ</span>
                     )}
                   </td>
-                  <td>{rec.sourceFile.mimeType}</td>
-                  <td>{formatSize(rec.sourceFile.sizeBytes)}</td>
+                  <td>{rec.sourceFile?.mimeType ?? "—"}</td>
+                  <td>{rec.sourceFile ? formatSize(rec.sourceFile.sizeBytes) : "—"}</td>
                   <td>
-                    {rec.sourceFile.extractionStatus === "OK" ? (
+                    {rec.sourceFile?.extractionStatus === "OK" ? (
                       <span className="badge good">OK</span>
-                    ) : (
+                    ) : rec.sourceFile ? (
                       <span
                         className="badge danger"
                         title={
@@ -236,8 +285,8 @@ function DocumentsSection({
                       >
                         FAILED
                       </span>
-                    )}
-                    {rec.sourceFile.extractionStatus === "FAILED" && (
+                    ) : "—"}
+                    {rec.sourceFile?.extractionStatus === "FAILED" && (
                       <p className="hint">
                         {rec.sourceFile.extractionError ||
                           "Không rõ nguyên nhân lỗi trích xuất."}
@@ -253,6 +302,19 @@ function DocumentsSection({
                       ? dateTime(rec.versions[0].createdAt)
                       : "—"}
                   </td>
+                  {canDelete && (
+                    <td>
+                      <button
+                        type="button"
+                        className="btn danger small"
+                        aria-label={`Xóa ${rec.title}`}
+                        disabled={Boolean(deleteTarget)}
+                        onClick={() => { setDeleteError(""); setDeleteMessage(""); setDeleteTarget(rec); }}
+                      >
+                        Xóa
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>

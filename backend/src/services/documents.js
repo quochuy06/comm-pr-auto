@@ -1,7 +1,7 @@
 import { randomUUID, createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { HttpError } from "../lib/errors.js";
+import { HttpError, audit } from "../lib/errors.js";
 import { mediaDir } from "./images.js";
 import { createRequire } from "node:module";
 // pdf-parse/mammoth là CommonJS — nạp qua require để tương thích ESM.
@@ -137,12 +137,16 @@ export async function ingestUpload(db, bytes, { filename, pageId = "default", cr
   return getUpload(db, document.id);
 }
 
-export async function getUpload(db, documentId) {
-  const document = await db.knowledgeDocument.findUnique({
-    where: { id: documentId },
+export async function getUpload(db, documentId, pageId) {
+  const document = await db.knowledgeDocument.findFirst({
+    where: { id: documentId, kind: "UPLOAD", deletedAt: null, ...(pageId ? { pageId } : {}) },
     include: { sourceFile: true, versions: { include: { _count: { select: { chunks: true } } } } },
   });
   if (!document) throw new HttpError(404, "Không tìm thấy tài liệu.");
+  return serializeUpload(document);
+}
+
+function serializeUpload(document) {
   return {
     documentId: document.id,
     pageId: document.pageId,
@@ -162,9 +166,26 @@ export async function getUpload(db, documentId) {
 
 export async function listUploads(db, { pageId, includeArchived = false } = {}) {
   const documents = await db.knowledgeDocument.findMany({
-    where: { kind: "UPLOAD", ...(pageId ? { pageId } : {}), ...(includeArchived ? {} : { archivedAt: null }) },
+    where: { kind: "UPLOAD", deletedAt: null, ...(pageId ? { pageId } : {}), ...(includeArchived ? {} : { archivedAt: null }) },
     orderBy: { createdAt: "desc" },
     include: { sourceFile: true, versions: { include: { _count: { select: { chunks: true } } } } },
   });
-  return Promise.all(documents.map((d) => getUpload(db, d.id)));
+  return documents.map(serializeUpload);
+}
+
+// Keep the original file and source history private for audit purposes.
+export async function deleteUpload(db, documentId, { pageId, actor }) {
+  return db.$transaction(async (tx) => {
+    const scope = { id: documentId, pageId, kind: "UPLOAD" };
+    const now = new Date();
+    const { count } = await tx.knowledgeDocument.updateMany({
+      where: { ...scope, deletedAt: null },
+      data: { deletedAt: now, archivedAt: now, activeVersionId: null },
+    });
+    if (count) {
+      await audit(tx, actor, "KNOWLEDGE_UPLOAD_DELETED", documentId);
+    } else if (!(await tx.knowledgeDocument.findFirst({ where: scope, select: { id: true } }))) {
+      throw new HttpError(404, "Không tìm thấy tài liệu.");
+    }
+  });
 }
